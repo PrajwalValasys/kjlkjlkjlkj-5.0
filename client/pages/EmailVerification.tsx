@@ -1,0 +1,579 @@
+import { useEffect, useMemo, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+import {
+  ArrowLeft,
+  Globe,
+  Sparkles,
+  CheckCircle,
+  Shield,
+  Play,
+  Activity,
+  TrendingUp,
+  Megaphone,
+  Mail,
+  Brain,
+  Clock,
+  RefreshCw,
+} from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { toast } from "sonner";
+import IntegrationsFooter from "@/components/auth/IntegrationsFooter";
+import AssociationPartners from "@/components/auth/AssociationPartners";
+import {
+  verifyEmailOTP,
+  resendEmailOTP,
+  selectAuth,
+  selectIsLoading,
+  selectNewUserDetails,
+  clearError,
+} from "@/store/reducers/authSlice";
+import { AppDispatch } from "@/store";
+
+export default function EmailVerification() {
+  const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
+  const location = useLocation() as any;
+  const { isLoading, error } = useSelector(selectAuth);
+  const newUserDetails = useSelector(selectNewUserDetails);
+  
+  const [mounted, setMounted] = useState(false);
+  const [otpValue, setOtpValue] = useState("");
+  const [validationError, setValidationError] = useState("");
+  const [otpError, setOtpError] = useState("");
+  
+  // Timer management
+  const time = 180; // 3 minutes
+  const initialTimerValue = localStorage.getItem("otpTimerEndTime")
+    ? Math.ceil(
+        (parseInt(localStorage.getItem("otpTimerEndTime")!) - new Date().getTime()) / 1000
+      )
+    : time;
+  
+  const [timer, setTimer] = useState(initialTimerValue);
+  const [isTimerRunning, setIsTimerRunning] = useState(initialTimerValue > 0);
+
+  // Get email from location state, Redux state, or localStorage
+  const signupEmail = useMemo(() => {
+    const fromState = location?.state?.email as string | undefined;
+    if (fromState) return fromState;
+    
+    // Try to get from Redux state
+    if (newUserDetails.newUserDetails?.username) {
+      return newUserDetails.newUserDetails.username;
+    }
+    
+    try {
+      const stored = localStorage.getItem("signupEmail");
+      return stored || "";
+    } catch (e) {
+      return "";
+    }
+  }, [location?.state, newUserDetails.newUserDetails?.username]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Redirect if no email
+  useEffect(() => {
+    if (!signupEmail) {
+      navigate("/free-trial");
+    }
+  }, [signupEmail, navigate]);
+
+  // Clear errors on unmount
+  useEffect(() => {
+    return () => {
+      dispatch(clearError());
+    };
+  }, [dispatch]);
+
+  // Robust timer using recursive setTimeout to handle browser throttling
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    let startTime = Date.now();
+    let lastExecutionTime = Date.now();
+    let initialTimer = timer;
+
+    function updateTimer() {
+      const now = Date.now();
+      const elapsed = now - lastExecutionTime;
+
+      if (!document.hidden && isTimerRunning) {
+        // Calculate actual time passed since start
+        const totalElapsed = Math.floor((now - startTime) / 1000);
+        const newTimer = Math.max(0, initialTimer - totalElapsed);
+        setTimer(newTimer);
+        lastExecutionTime = now;
+
+        if (newTimer <= 0) {
+          setIsTimerRunning(false);
+          localStorage.removeItem("otpTimerEndTime");
+          localStorage.removeItem("otp");
+          return; // Stop the timer
+        }
+      }
+
+      // Dynamic delay: shorter when tab is visible, longer when hidden
+      const delay = document.hidden ? 5000 : Math.max(1000 - (elapsed % 1000), 0);
+
+      if (isTimerRunning) {
+        timeoutId = setTimeout(updateTimer, delay);
+      }
+    }
+
+    if (isTimerRunning && timer > 0) {
+      updateTimer();
+    }
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [isTimerRunning]); // Only depend on isTimerRunning
+
+  useEffect(() => {
+    if (isTimerRunning) {
+      const timerEndTime = new Date().getTime() + timer * 1000;
+      localStorage.setItem("otpTimerEndTime", timerEndTime.toString());
+      localStorage.setItem("otp", otpValue);
+    }
+  }, [timer, otpValue, isTimerRunning]);
+
+  const handleOtpChange = (value: string) => {
+    // Check for non-numeric characters
+    if (value && !/^\d+$/.test(value)) {
+      setValidationError("Please enter only numbers");
+    } else {
+      setValidationError("");
+    }
+    // Filter out non-numeric characters
+    const filteredOtp = value.replace(/\D/g, "");
+    setOtpValue(filteredOtp);
+    setOtpError(""); // Clear error when user types
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (otpValue.length !== 4) {
+      setOtpError("Please enter a valid 4-digit OTP");
+      return;
+    }
+
+    if (!isTimerRunning) {
+      setOtpError("OTP has expired. Please request a new one.");
+      return;
+    }
+
+    try {
+      const payload = { email: signupEmail, otp: otpValue };
+      const result = await dispatch(verifyEmailOTP(payload));
+      
+      if (result.type === "auth/verifyEmailOTP/fulfilled") {
+        clearOtpExpiry();
+        toast.success("Email verified successfully! Welcome to VAIS!");
+        navigate("/login");
+      } else if (result.type === "auth/verifyEmailOTP/rejected") {
+        setOtpError(result.payload as string || "Invalid OTP. Please try again.");
+      }
+    } catch (error) {
+      console.error("OTP verification error:", error);
+      setOtpError("Something went wrong. Please try again.");
+    }
+  };
+
+  const handleResend = async () => {
+    try {
+      const userId = newUserDetails.newUserDetails?.user_id;
+      const payload = { email: signupEmail, user_id: userId };
+      
+      const result = await dispatch(resendEmailOTP(payload));
+      
+      if (result.type === "auth/resendEmailOTP/fulfilled") {
+        setOtpValue("");
+        setTimer(time);
+        setIsTimerRunning(true);
+        setOtpError("");
+        localStorage.removeItem("otpTimerEndTime");
+        localStorage.removeItem("otp");
+        toast.success("New OTP sent to your email!");
+      }
+    } catch (error) {
+      console.error("Resend OTP error:", error);
+      toast.error("Failed to resend OTP. Please try again.");
+    }
+  };
+
+  const clearOtpExpiry = () => {
+    setTimer(time);
+    setIsTimerRunning(false);
+    localStorage.removeItem("otpTimerEndTime");
+    localStorage.removeItem("otp");
+  };
+
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = time % 60;
+    return `${minutes}:${seconds < 10 ? `0${seconds}` : seconds}`;
+  };
+
+  const aiElements = [
+    {
+      top: "12%",
+      left: "10%",
+      delay: "0s",
+      size: "w-3 h-3",
+      color: "bg-valasys-orange/30",
+    },
+    {
+      top: "28%",
+      right: "18%",
+      delay: "1s",
+      size: "w-2 h-2",
+      color: "bg-valasys-blue/40",
+    } as any,
+    {
+      top: "42%",
+      left: "6%",
+      delay: "2s",
+      size: "w-4 h-4",
+      color: "bg-valasys-green/25",
+    },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-valasys-gray-50 via-white to-valasys-orange/5 lg:grid lg:grid-cols-2 relative overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_left,rgba(255,106,0,0.15),transparent_50%),radial-gradient(ellipse_at_bottom_right,rgba(26,115,232,0.12),transparent_50%),radial-gradient(ellipse_at_top_right,rgba(0,196,140,0.12),transparent_40%)]"></div>
+        <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-valasys-orange/25 blur-3xl"></div>
+        <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-valasys-blue/25 blur-3xl"></div>
+        {aiElements.map((e, i) => (
+          <div
+            key={i}
+            className={`absolute ${e.size} ${e.color} rounded-full animate-pulse`}
+            style={{
+              top: (e as any).top,
+              left: (e as any).left,
+              right: (e as any).right,
+              animationDelay: (e as any).delay,
+            }}
+          />
+        ))}
+      </div>
+
+      <div
+        className={`flex items-center justify-center p-8 relative z-10 transform transition-all duration-700 ${mounted ? "translate-x-0 opacity-100" : "-translate-x-6 opacity-0"}`}
+      >
+        <div className="w-full max-w-md space-y-6">
+          <Card className="border-valasys-gray-200 shadow-xl hover:shadow-2xl transition-all duration-400 backdrop-blur-sm bg-white/95">
+            <CardHeader className="space-y-1 pb-4 text-center">
+              <img
+                src="https://cdn.builder.io/api/v1/image/assets%2F76d83d63beb8455692b1855a78aa9524%2F5ee47be8ea214f9c9b220b553ddb9ad1?format=webp&width=800"
+                alt="Valasys AI Score logo"
+                className="mx-auto h-12 w-auto object-contain mb-4"
+              />
+
+              {/* Timer Status */}
+              <div className="mb-4">
+                {isTimerRunning ? (
+                  <div className="flex items-center justify-center space-x-2 text-valasys-green">
+                    <Clock className="h-4 w-4" />
+                    <span className="text-sm font-medium">
+                      OTP expires in: {formatTime(timer)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center space-x-2 text-red-500">
+                    <Clock className="h-4 w-4" />
+                    <span className="text-sm font-medium">OTP Expired</span>
+                  </div>
+                )}
+              </div>
+
+              <CardTitle className="text-lg font-semibold text-valasys-gray-900">
+                Enter Email Verification Code
+              </CardTitle>
+              <p className="text-sm text-valasys-gray-600">
+                {"We've sent a code to "}
+                <span className="font-medium text-valasys-gray-900">
+                  {signupEmail ? signupEmail.replace(/(?<=.{3}).(?=.*@)/g, '*') : "your email"}
+                </span>
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-valasys-gray-700 flex items-center justify-center space-x-1">
+                    <Mail className="h-3 w-3" />
+                    <span>Verification Code</span>
+                  </Label>
+                  <div className="flex justify-center">
+                    <InputOTP
+                      maxLength={4}
+                      value={otpValue}
+                      onChange={handleOtpChange}
+                      className="gap-2"
+                    >
+                      <InputOTPGroup>
+                        <InputOTPSlot
+                          index={0}
+                          className="border-valasys-gray-300 focus:border-valasys-orange focus:ring-valasys-orange/20 w-14 h-14 text-lg"
+                        />
+                        <InputOTPSlot
+                          index={1}
+                          className="border-valasys-gray-300 focus:border-valasys-orange focus:ring-valasys-orange/20 w-14 h-14 text-lg"
+                        />
+                        <InputOTPSlot
+                          index={2}
+                          className="border-valasys-gray-300 focus:border-valasys-orange focus:ring-valasys-orange/20 w-14 h-14 text-lg"
+                        />
+                        <InputOTPSlot
+                          index={3}
+                          className="border-valasys-gray-300 focus:border-valasys-orange focus:ring-valasys-orange/20 w-14 h-14 text-lg"
+                        />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
+                  
+                  {/* Error Messages */}
+                  {validationError && (
+                    <p className="text-red-500 text-xs text-center mt-2">{validationError}</p>
+                  )}
+                  {otpError && (
+                    <p className="text-red-500 text-xs text-center mt-2">{otpError}</p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate("/create-account")}
+                    className="gap-2 border-valasys-gray-300 text-valasys-gray-700 hover:bg-valasys-gray-50"
+                  >
+                    <ArrowLeft className="h-4 w-4" /> Back
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={isLoading || otpValue.length !== 4 || !!validationError || !isTimerRunning}
+                    className="bg-valasys-orange hover:bg-valasys-orange-light text-white font-medium py-3 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-102"
+                  >
+                    {isLoading ? (
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Verifying...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Shield className="mr-2 h-4 w-4" />
+                        Verify Email
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+
+              {/* Resend OTP */}
+              <div className="text-center pt-4 border-t border-valasys-gray-200">
+                <p className="text-sm text-valasys-gray-600 mb-2">
+                  Didn't receive the code?
+                </p>
+                <button
+                  onClick={handleResend}
+                  disabled={isTimerRunning || isLoading}
+                  className={`text-sm font-medium transition-colors ${
+                    !isTimerRunning && !isLoading
+                      ? "text-valasys-orange hover:text-valasys-orange-light cursor-pointer"
+                      : "text-valasys-gray-400 cursor-not-allowed"
+                  }`}
+                >
+                  {!isTimerRunning && !isLoading ? (
+                    <div className="flex items-center justify-center space-x-1">
+                      <RefreshCw className="h-3 w-3" />
+                      <span>Resend Code</span>
+                    </div>
+                  ) : (
+                    `Resend available in ${formatTime(timer)}`
+                  )}
+                </button>
+              </div>
+
+              {/* Help link */}
+              <div className="text-center">
+                <p className="text-sm text-valasys-gray-600">
+                  Already verified?{" "}
+                  <a 
+                    href="/login" 
+                    onClick={clearOtpExpiry}
+                    className="text-valasys-orange hover:text-valasys-orange-light font-medium transition-colors duration-200 hover:underline"
+                  >
+                    Sign In
+                  </a>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Powered by 50+ Integrations (below form) */}
+          <div className="pt-4">
+            <IntegrationsFooter />
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={`hidden lg:flex relative bg-gradient-to-br from-valasys-orange/10 via-valasys-blue/10 to-valasys-green/10 backdrop-blur-sm transform transition-all duration-700 ${mounted ? "translate-x-0 opacity-100" : "translate-x-6 opacity-0"}`}
+      >
+        <div className="absolute inset-0 bg-gradient-to-br from-valasys-orange/15 via-valasys-orange-light/10 to-valasys-blue/15"></div>
+        <div className="relative z-10 flex flex-col justify-center space-y-8 p-8 w-full">
+          <div
+            className={`space-y-4 transform transition-all duration-700 ease-out ${mounted ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"}`}
+            style={{ transitionDelay: "150ms" }}
+          >
+            <h2 className="text-2xl font-bold text-valasys-gray-900">
+              Almost There! <span className="text-valasys-orange">Verify Your Email</span>
+            </h2>
+            <p className="text-valasys-gray-600">
+              We've sent a secure verification code to your email address. 
+              Enter it below to activate your account and start your AI journey.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex items-start space-x-3">
+                <div className="w-8 h-8 rounded-lg border border-valasys-orange text-valasys-orange flex items-center justify-center shadow-sm">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-semibold text-valasys-gray-900">
+                    Email Security
+                  </div>
+                  <p className="text-xs text-valasys-gray-600">
+                    Secure verification protects your account
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-3">
+                <div className="w-8 h-8 rounded-lg border border-valasys-orange text-valasys-orange flex items-center justify-center shadow-sm">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-semibold text-valasys-gray-900">
+                    Quick Process
+                  </div>
+                  <p className="text-xs text-valasys-gray-600">
+                    One-time code expires in 3 minutes
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-3">
+                <div className="w-8 h-8 rounded-lg border border-valasys-orange text-valasys-orange flex items-center justify-center shadow-sm">
+                  <Brain className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-semibold text-valasys-gray-900">
+                    Instant Access
+                  </div>
+                  <p className="text-xs text-valasys-gray-600">
+                    Get immediate access to AI insights
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-3">
+                <div className="w-8 h-8 rounded-lg border border-valasys-orange text-valasys-orange flex items-center justify-center shadow-sm">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-semibold text-valasys-gray-900">
+                    Free Trial Ready
+                  </div>
+                  <p className="text-xs text-valasys-gray-600">
+                    5 days of full platform access awaits
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className={`space-y-4 transform transition-all duration-700 ease-out ${mounted ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"}`}
+          >
+            <div className="text-center space-y-2">
+              <h2 className="text-2xl font-bold text-valasys-gray-900 flex items-center justify-center space-x-2">
+                <Play className="h-6 w-6 text-valasys-orange" />
+                <span>See VAIS in Action</span>
+              </h2>
+              <p className="text-valasys-gray-600">
+                Watch how AI transforms your sales process
+              </p>
+            </div>
+            <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-black/10 backdrop-blur-sm border border-white/20">
+              <video
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="w-full h-64 object-cover"
+                poster="/placeholder.svg"
+              >
+                <source
+                  src="https://cdn.builder.io/o/assets%2F30afb9e14ebd49aea9f5ae01cdf07930%2F8104f428ea2041e4b1e7817c489b1720?alt=media&token=183f0972-b931-4c24-bb07-a6086bd27c3a&apiKey=30afb9e14ebd49aea9f5ae01cdf07930"
+                  type="video/mp4"
+                />
+              </video>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+            </div>
+          </div>
+
+          <div
+            className={`transform transition-all duration-700 ease-out ${mounted ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"}`}
+            style={{ transitionDelay: "300ms" }}
+          >
+            <div className="space-y-4">
+              <div className="text-center space-y-2">
+                <h3 className="text-xl font-semibold text-valasys-gray-900 flex items-center justify-center space-x-2">
+                  <Sparkles className="h-5 w-5 text-valasys-orange" />
+                  <span>In Association With</span>
+                </h3>
+                <p className="text-valasys-gray-600 text-sm">
+                  Trusted data and reviews partners
+                </p>
+              </div>
+              <AssociationPartners />
+            </div>
+          </div>
+
+          <div
+            className={`flex items-center justify-center space-x-6 pt-6 border-t border-white/20 transform transition-all duration-700 ${mounted ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0"}`}
+            style={{ transitionDelay: "1000ms" }}
+          >
+            <div className="flex items-center space-x-2 hover:scale-105 transition-transform duration-300 cursor-pointer">
+              <div className="p-2 bg-white/20 rounded-full backdrop-blur-sm">
+                <CheckCircle className="h-4 w-4 text-valasys-green" />
+              </div>
+              <span className="text-sm font-medium text-valasys-gray-800">
+                SOC 2 Compliant
+              </span>
+            </div>
+            <div className="flex items-center space-x-2 hover:scale-105 transition-transform duration-300 cursor-pointer">
+              <div className="p-2 bg-white/20 rounded-full backdrop-blur-sm">
+                <Shield className="h-4 w-4 text-valasys-blue" />
+              </div>
+              <span className="text-sm font-medium text-valasys-gray-800">
+                GDPR Ready
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
