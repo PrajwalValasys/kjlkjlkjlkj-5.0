@@ -40,6 +40,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { persistor } from "@/store";
+import { useNavigate } from "react-router-dom";
+import { useDispatch } from 'react-redux';
+import type { AppDispatch } from '@/store';
+import { logoutUser } from '@/store/reducers/authSlice';
 import { DraggableChatSupport } from "@/components/ui/draggable-chat-support";
 import { useTour } from "@/contexts/TourContext";
 import PlatformTour from "@/components/tour/PlatformTour";
@@ -208,6 +213,33 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const handleChatClose = () => {
     setChatOpen(false);
     setChatMinimized(true);
+  };
+
+  const navigate = useNavigate();
+  const dispatch = useDispatch<AppDispatch>();
+
+  const handleLogout = async () => {
+    try {
+      // First, update redux state via logout thunk so selectors update immediately
+      await dispatch(logoutUser());
+
+      // Then purge persisted store
+      await persistor.purge();
+
+      // Also clear any stored tokens just in case
+      try {
+        localStorage.removeItem('valasys_auth_token');
+        localStorage.removeItem('valasys_refresh_token');
+      } catch (e) {
+        // ignore
+      }
+
+      // Navigate to login
+      navigate('/login');
+    } catch (error) {
+      console.error('Error during logout:', error);
+      navigate('/login');
+    }
   };
 
   const handleMobileNavigationClick = () => {
@@ -691,7 +723,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem className="cursor-pointer text-red-600">
+                      <DropdownMenuItem className="cursor-pointer text-red-600" onClick={handleLogout}>
                         <LogOut className="mr-2 h-4 w-4" />
                         Logout
                       </DropdownMenuItem>
