@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useSelector } from 'react-redux';
+import { RootState } from '@/store/reducers';
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { FloatingStatsWidget } from "@/components/ui/floating-stats-widget";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,6 +51,21 @@ import {
   Target,
   Maximize,
   BarChart3,
+  X,
+  MapPin,
+  Phone,
+  Calendar,
+  Briefcase,
+  Brain,
+  Activity,
+  User,
+  Crown,
+  PiggyBank,
+  Cpu,
+  Newspaper,
+  Link as LinkIcon,
+  Badge as BadgeIcon,
+  ExternalLink,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -75,6 +92,23 @@ interface CompanyData {
 
 // Enhanced sample data matching the screenshot
 const sampleData: CompanyData[] = [
+  {
+    id: "0",
+    companyName: "BBCL",
+    vais: 93,
+    intentSignal: "Strong",
+    mainIndustry: "Business Services",
+    subIndustry: "Consulting and Services",
+    companySize: "1001-5000",
+    revenue: "$500M",
+    country: "New Zealand",
+    city: "San Rafael, CA",
+    selected: false,
+    compositeScore: 89,
+    deltaScore: 9.8,
+    matchedTopics: 19,
+    relatedTopics: ["AutoCAD", "Revit", "Maya", "3ds Max"],
+  },
   {
     id: "1",
     companyName: "Autodesk",
@@ -337,6 +371,7 @@ const sampleData: CompanyData[] = [
 ];
 
 export default function VAISResults() {
+  const icpScore = useSelector((state: RootState) => state.icpScore.icpScore);
   const [data, setData] = useState<CompanyData[]>(sampleData);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -352,6 +387,20 @@ export default function VAISResults() {
     vaisRange: { min: 0, max: 100 },
   });
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [activeCompany, setActiveCompany] = useState<CompanyData | null>(null);
+
+  const openDetails = (company: CompanyData) => {
+    setActiveCompany(company);
+    setDetailsOpen(true);
+  };
+  const closeDetails = () => setDetailsOpen(false);
+
+  useEffect(() => {
+    if (icpScore && Array.isArray(icpScore.data)) {
+      setData(icpScore.data as CompanyData[]);
+    }
+  }, [icpScore]);
 
   // Column visibility state
   const [columnVisibility, setColumnVisibility] = useState({
@@ -960,7 +1009,13 @@ export default function VAISResults() {
                         </TableCell>
                         {columnVisibility.companyName && (
                           <TableCell className="font-medium text-valasys-gray-900">
-                            {item.companyName}
+                            <button
+                              className="flex items-center space-x-2 text-black hover:text-gray-800 hover:underline focus:outline-none group"
+                              onClick={() => openDetails(item)}
+                            >
+                              <span>{item.companyName}</span>
+                              <ExternalLink className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
+                            </button>
                           </TableCell>
                         )}
                         {columnVisibility.vais && (
@@ -1095,6 +1150,420 @@ export default function VAISResults() {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Slide-in Details Panel */}
+        <div
+          className={cn(
+            "fixed inset-0 z-50",
+            detailsOpen ? "pointer-events-auto" : "pointer-events-none",
+          )}
+        >
+          <div
+            className={cn(
+              "absolute inset-0 bg-black/30 transition-opacity",
+              detailsOpen ? "opacity-100" : "opacity-0",
+            )}
+            onClick={closeDetails}
+          />
+          <div
+            className={cn(
+              "absolute right-0 top-0 h-full w-[60%] bg-white shadow-xl transition-transform duration-300",
+              detailsOpen ? "translate-x-0" : "translate-x-full",
+            )}
+          >
+            <div className="h-full overflow-auto flex flex-col">
+              <div className="p-4 border-b bg-gradient-to-r from-valasys-orange to-valasys-orange-light text-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
+                      <Building className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <div className="text-lg font-bold">
+                          {activeCompany?.companyName}
+                        </div>
+                        <Badge
+                          className={cn(
+                            "text-xs px-2 py-1 font-medium",
+                            getIntentSignalColor(
+                              activeCompany?.intentSignal || "",
+                            ),
+                          )}
+                        >
+                          {activeCompany?.intentSignal}
+                        </Badge>
+                      </div>
+                      <div className="text-xs opacity-90">Overview</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={closeDetails}
+                    className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center backdrop-blur-sm transition-colors"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <Card>
+                    <CardContent className="p-3 text-center">
+                      <div className="text-xs text-gray-600">VAIS Score</div>
+                      <div className="text-xl font-bold">
+                        {activeCompany?.companyName === "BBCL"
+                          ? 89
+                          : Math.round(activeCompany?.compositeScore ?? 0)}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-3 text-center">
+                      <div className="text-xs text-gray-600">Evaluation</div>
+                      <div className="text-xl font-bold">
+                        {activeCompany?.companyName === "BBCL"
+                          ? "93%"
+                          : `${Math.round(activeCompany?.vais ?? 0)}%`}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-3 text-center">
+                      <div className="text-xs text-gray-600">Company Size</div>
+                      <div className="text-sm font-semibold">
+                        {activeCompany?.companySize}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-3 text-center">
+                      <div className="text-xs text-gray-600">
+                        Company Revenue
+                      </div>
+                      <div className="text-sm font-semibold">
+                        {activeCompany?.revenue}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div>
+                    <div className="px-3 py-2 bg-gradient-to-r from-blue-50 to-blue-100 border-l-4 border-blue-300 text-blue-700 text-sm font-semibold rounded-t-lg">
+                      Contact & Business Info
+                    </div>
+                    <div className="border border-t-0 rounded-b-lg p-3 grid grid-cols-2 gap-3 text-sm bg-white shadow-sm">
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <MapPin className="w-4 h-4" />
+                          <span>HQ</span>
+                        </div>
+                        <div className="font-medium">
+                          {activeCompany?.companyName === "BBCL"
+                            ? "San Rafael, California, United States"
+                            : activeCompany?.city}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <Phone className="w-4 h-4" />
+                          <span>Phone</span>
+                        </div>
+                        <div className="font-medium">
+                          {activeCompany?.companyName === "BBCL"
+                            ? "+1-415-507-5000"
+                            : "N/A"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <Globe className="w-4 h-4" />
+                          <span>Country</span>
+                        </div>
+                        <div className="font-medium">
+                          {activeCompany?.country}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <Calendar className="w-4 h-4" />
+                          <span>Founded</span>
+                        </div>
+                        <div className="font-medium">
+                          {activeCompany?.companyName === "BBCL" ? "1982" : "—"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <Briefcase className="w-4 h-4" />
+                          <span>Business Model</span>
+                        </div>
+                        <div className="font-medium">
+                          {activeCompany?.companyName === "BBCL" ? "B2B" : "—"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <Building className="w-4 h-4" />
+                          <span>Business Services</span>
+                        </div>
+                        <div className="font-medium">
+                          {activeCompany?.mainIndustry}
+                        </div>
+                      </div>
+                      <div className="col-span-2">
+                        {activeCompany?.companyName === "BBCL" && (
+                          <div className="flex items-center space-x-2">
+                            <LinkIcon className="w-4 h-4 text-gray-500" />
+                            <a
+                              className="text-blue-600 hover:underline"
+                              href="#"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              www.bbcl.com
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="px-3 py-2 bg-gradient-to-r from-green-50 to-green-100 border-l-4 border-green-300 text-green-700 text-sm font-semibold rounded-t-lg">
+                      AI Intent Analysis
+                    </div>
+                    <div className="border border-t-0 rounded-b-lg p-3 space-y-2 text-sm bg-white shadow-sm">
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <Brain className="w-4 h-4" />
+                          <span>Intent</span>
+                        </div>
+                        <div className="font-medium">
+                          {activeCompany?.companyName === "BBCL"
+                            ? "This lead is in the evaluation stage, indicating a high likelihood to buy. Key activities include requesting product demo."
+                            : activeCompany?.intentSignal}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <Activity className="w-4 h-4" />
+                          <span>Recent Activities</span>
+                        </div>
+                        <ul className="list-disc pl-5 space-y-1">
+                          <li>Requested product demo for AutoCAD — Jun 15</li>
+                          <li>Downloaded technical whitepaper — Jun 12</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="px-3 py-2 bg-gradient-to-r from-pink-50 to-pink-100 border-l-4 border-pink-300 text-pink-700 text-sm font-semibold rounded-t-lg">
+                      Key People
+                    </div>
+                    <div className="border border-t-0 rounded-b-lg p-3 space-y-2 text-sm bg-white shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Crown className="w-4 h-4 text-yellow-500" />
+                          <span>Sarah Chen</span>
+                        </div>
+                        <span className="text-gray-500">
+                          Chief Executive Officer
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <User className="w-4 h-4 text-blue-500" />
+                          <span>Michael Rodriguez</span>
+                        </div>
+                        <span className="text-gray-500">
+                          Chief Technology Officer
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <DollarSign className="w-4 h-4 text-green-500" />
+                          <span>Emily Johnson</span>
+                        </div>
+                        <span className="text-gray-500">
+                          Chief Financial Officer
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="px-3 py-2 bg-gradient-to-r from-teal-50 to-teal-100 border-l-4 border-teal-300 text-teal-700 text-sm font-semibold rounded-t-lg">
+                      Major Investors
+                    </div>
+                    <div className="border border-t-0 rounded-b-lg p-3 space-y-2 text-sm bg-white shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <PiggyBank className="w-4 h-4 text-green-500" />
+                          <span>Vanguard Group</span>
+                        </div>
+                        <Badge variant="secondary" className="bg-gray-100">
+                          8.2%
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <PiggyBank className="w-4 h-4 text-green-500" />
+                          <span>BlackRock Inc.</span>
+                        </div>
+                        <Badge variant="secondary" className="bg-gray-100">
+                          6.7%
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <PiggyBank className="w-4 h-4 text-green-500" />
+                          <span>Sequoia Capital</span>
+                        </div>
+                        <Badge variant="secondary" className="bg-gray-100">
+                          4.1%
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="px-3 py-2 bg-gradient-to-r from-purple-50 to-purple-100 border-l-4 border-purple-300 text-purple-700 text-sm font-semibold rounded-t-lg">
+                      Technology & Competition
+                    </div>
+                    <div className="border border-t-0 rounded-b-lg p-3 space-y-3 text-sm bg-white shadow-sm">
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <Cpu className="w-4 h-4" />
+                          <span>Technologies</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {(activeCompany?.companyName === "BBCL"
+                            ? ["AutoCAD", "Revit", "Maya", "3ds Max", "+2 more"]
+                            : activeCompany?.relatedTopics || []
+                          ).map((t) => (
+                            <Badge
+                              key={t}
+                              variant="secondary"
+                              className="bg-gray-100"
+                            >
+                              {t}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <Target className="w-4 h-4" />
+                          <span>Key Competitors</span>
+                        </div>
+                        <div className="text-sm">
+                          Dassault Systèmes, PTC, Trimble, Adobe, Siemens, PLM
+                          Software
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="px-3 py-2 bg-gradient-to-r from-indigo-50 to-indigo-100 border-l-4 border-indigo-300 text-indigo-700 text-sm font-semibold rounded-t-lg">
+                      Stock Info
+                    </div>
+                    <div className="border border-t-0 rounded-b-lg p-3 grid grid-cols-2 gap-3 text-sm bg-white shadow-sm">
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <DollarSign className="w-4 h-4" />
+                          <span>Price</span>
+                        </div>
+                        <div className="font-semibold text-green-700">
+                          $145.32
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <BarChart3 className="w-4 h-4" />
+                          <span>Cap</span>
+                        </div>
+                        <div className="font-semibold">$12.5B</div>
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <BadgeIcon className="w-4 h-4" />
+                          <span>Symbol</span>
+                        </div>
+                        <div className="font-semibold">BBCL</div>
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                          <Building className="w-4 h-4" />
+                          <span>Exchange</span>
+                        </div>
+                        <div className="font-semibold">NASDAQ</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="px-3 py-2 bg-gradient-to-r from-orange-50 to-orange-100 border-l-4 border-orange-300 text-orange-700 text-sm font-semibold rounded-t-lg">
+                      Recent News
+                    </div>
+                    <div className="border border-t-0 rounded-b-lg p-3 space-y-2 text-sm bg-white shadow-sm">
+                      <div className="flex items-start space-x-2">
+                        <Newspaper className="w-4 h-4 text-gray-500 mt-1 flex-shrink-0" />
+                        <div>
+                          <div className="font-medium">
+                            BBCL Announces Q3 2024 Financial Results
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Business Wire • 2024-06-10
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-start space-x-2">
+                        <Newspaper className="w-4 h-4 text-gray-500 mt-1 flex-shrink-0" />
+                        <div>
+                          <div className="font-medium">
+                            New Partnership with Tech Innovators Inc.
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            TechCrunch • 2024-06-05
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="px-3 py-2 bg-gradient-to-r from-cyan-50 to-cyan-100 border-l-4 border-cyan-300 text-cyan-700 text-sm font-semibold rounded-t-lg">
+                      Sources & Links
+                    </div>
+                    <div className="border border-t-0 rounded-b-lg p-3 space-y-2 text-sm bg-white shadow-sm">
+                      <div className="flex items-center space-x-2">
+                        <LinkIcon className="w-4 h-4 text-gray-500" />
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="secondary" className="bg-gray-100">
+                            Newsletter
+                          </Badge>
+                          <Badge variant="secondary" className="bg-gray-100">
+                            Blog
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Globe className="w-4 h-4 text-gray-500" />
+                        <div className="text-xs text-gray-600">
+                          bbcl.com • en.wikipedia.org/wiki/BBCL • +2 more
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </DashboardLayout>

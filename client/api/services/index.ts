@@ -1,6 +1,7 @@
 // Export services
 export { default as authService } from './authService';
 export { default as userService } from './userService';
+export { default as icpService } from './icpService';
 
 // Export types from auth service
 export type {

@@ -1,4 +1,7 @@
 import React, { useState, useRef } from "react";
+import { useDispatch } from 'react-redux';
+import { setICPScore } from '@/store/reducers/icpScoreSlice';
+import { icpService } from '@/api/services';
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -67,7 +70,8 @@ interface SavedSearch {
   createdAt: Date;
 }
 
-const productSubcategories = [
+// Default fallbacks used until API values are loaded
+const DEFAULT_PRODUCT_SUBCATEGORIES = [
   "Software Solutions",
   "Hardware Components",
   "Cloud Services",
@@ -78,7 +82,7 @@ const productSubcategories = [
   "Infrastructure Services",
 ];
 
-const productCategories = [
+const DEFAULT_PRODUCT_CATEGORIES = [
   "Enterprise Software",
   "Consumer Technology",
   "B2B Services",
@@ -89,7 +93,7 @@ const productCategories = [
   "Digital Marketing",
 ];
 
-const geolocations = [
+const DEFAULT_GEOLOCATIONS = [
   "North America",
   "Europe",
   "Asia Pacific",
@@ -365,6 +369,53 @@ export default function BuildVAISForm() {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [newSearchName, setNewSearchName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dispatch = useDispatch();
+  const [productCategories, setProductCategories] = useState<string[]>(DEFAULT_PRODUCT_CATEGORIES);
+  const [productSubcategories, setProductSubcategories] = useState<string[]>(DEFAULT_PRODUCT_SUBCATEGORIES);
+  const [geolocations, setGeolocations] = useState<string[]>(DEFAULT_GEOLOCATIONS);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [catsRes, subsRes, countriesRes] = await Promise.all([
+          icpService.getProductsCategory().catch(() => null),
+          icpService.getProductsSubCategory().catch(() => null),
+          icpService.getAllCountries().catch(() => null),
+        ]);
+
+        if (!mounted) return;
+
+        const normalizeArray = (res: any) => {
+          // Try a few common shapes returned by different backends
+          if (!res) return null;
+          if (Array.isArray(res)) return res;
+          // axios-like: response.data could be the array or an object that wraps the array
+          if (Array.isArray(res.data)) return res.data;
+          if (Array.isArray(res.data?.data)) return res.data.data;
+          // specific keys used by our ICP endpoints
+          if (Array.isArray(res.data?.product_sub_category_list)) return res.data.product_sub_category_list;
+          if (Array.isArray(res.product_sub_category_list)) return res.product_sub_category_list;
+          if (Array.isArray(res.data?.product_category_list)) return res.data.product_category_list;
+          if (Array.isArray(res.data?.countries)) return res.data.countries;
+          if (Array.isArray(res.data?.country_list)) return res.data.country_list;
+          return null;
+        };
+
+        const catsArr = normalizeArray(catsRes);
+        const subsArr = normalizeArray(subsRes);
+        const countriesArr = normalizeArray(countriesRes);
+
+  if (catsArr) setProductCategories(catsArr.map((i: any) => i.product_category_name || i.name || i));
+  if (subsArr) setProductSubcategories(subsArr.map((i: any) => i.product_sub_category_name || i.name || i));
+  if (countriesArr) setGeolocations(countriesArr.map((i: any) => i.country_name || i.name || i));
+      } catch (e) {
+        console.warn('Failed to fetch dropdown data', e);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   const filteredTopics = intentTopics.filter(
     (topic) =>
@@ -469,13 +520,29 @@ export default function BuildVAISForm() {
   };
 
   const handleBuildVAIS = () => {
-    console.log("Building VAIS with data:", {
-      ...formData,
-      intentTopics: selectedTopics,
-      uploadedFile,
-    });
-    // Navigate to results page
-    navigate("/vais-results");
+    const payload = {
+      product_subcategory: formData.productSubcategory,
+      product_category: formData.productCategory,
+      geolocation: formData.geolocation,
+      intent_topics: selectedTopics,
+    };
+
+    (async () => {
+      try {
+        setIsSaving(true);
+        const res = await icpService.getIcpScore(payload);
+        // Store response in redux for results page
+        dispatch(setICPScore(res));
+        // Navigate to results page
+        navigate('/vais-results');
+      } catch (err: any) {
+        console.error('Error fetching ICP score', err);
+        // show a basic alert for now; UI toast can be used if available
+        window.alert(err?.response?.data?.message || 'Failed to build VAIS. Please try again.');
+      } finally {
+        setIsSaving(false);
+      }
+    })();
   };
 
   const getTopicInsight = (topic: (typeof intentTopics)[0]) => (
@@ -1158,7 +1225,7 @@ export default function BuildVAISForm() {
           </div>
 
           {/* Enhanced Sidebar */}
-          <div className="space-y-6 sticky top-24 h-fit max-h-[calc(100vh-6rem)] overflow-y-auto">
+          <div className="space-y-6">
             {/* Step 3: File Upload with Enhanced Status */}
             <Card
               data-tour="vais-suppression-file"

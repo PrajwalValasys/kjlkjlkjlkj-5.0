@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -23,6 +23,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { CircularProgress } from "@/components/ui/circular-progress";
 import {
   Target,
@@ -59,6 +65,19 @@ import {
   Lock,
   ArrowUp,
   Brain,
+  MapPin,
+  Phone,
+  Calendar,
+  Briefcase,
+  Activity,
+  User,
+  Crown,
+  PiggyBank,
+  Cpu,
+  Newspaper,
+  Link as LinkIcon,
+  Badge as BadgeIcon,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import IntentSignalChart from "@/components/dashboard/IntentSignalChart";
@@ -427,11 +446,54 @@ export default function ABMLAL() {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [filters, setFilters] = useState({
     industry: "",
+    subIndustry: "",
     companySize: "",
     country: "",
-    intentSignal: "",
     vaisRange: { min: 0, max: 100 },
   });
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [columnVisibility, setColumnVisibility] = useState({
+    companyName: true,
+    vais: true,
+    intentSignal: true,
+    mainIndustry: true,
+    subIndustry: true,
+    companySize: true,
+    revenue: true,
+    country: true,
+  });
+  const columns = [
+    { key: "companyName", label: "Company Name" },
+    { key: "vais", label: "VAIS Score" },
+    { key: "intentSignal", label: "Intent Signal" },
+    { key: "mainIndustry", label: "Main Industry" },
+    { key: "subIndustry", label: "Sub Industry" },
+    { key: "companySize", label: "Company Size" },
+    { key: "revenue", label: "Revenue" },
+    { key: "country", label: "Country" },
+  ];
+  const toggleColumn = (columnKey: keyof typeof columnVisibility) => {
+    setColumnVisibility((prev) => ({ ...prev, [columnKey]: !prev[columnKey] }));
+  };
+  useEffect(() => {
+    const handleFullscreenChange = () =>
+      setIsFullScreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+  const subIndustries = useMemo(
+    () => Array.from(new Set(data.map((d) => d.subIndustry))).sort(),
+    [data],
+  );
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [activeCompany, setActiveCompany] = useState<CompanyData | null>(null);
+
+  const openDetails = (company: CompanyData) => {
+    setActiveCompany(company);
+    setDetailsOpen(true);
+  };
+  const closeDetails = () => setDetailsOpen(false);
 
   // Mock credit data
   const creditsData = {
@@ -492,8 +554,8 @@ export default function ABMLAL() {
         !filters.companySize || item.companySize === filters.companySize;
       const matchesCountry =
         !filters.country || item.country === filters.country;
-      const matchesIntentSignal =
-        !filters.intentSignal || item.intentSignal === filters.intentSignal;
+      const matchesSubIndustry =
+        !filters.subIndustry || item.subIndustry === filters.subIndustry;
       const matchesVais =
         item.vais >= filters.vaisRange.min &&
         item.vais <= filters.vaisRange.max;
@@ -503,7 +565,7 @@ export default function ABMLAL() {
         matchesIndustry &&
         matchesSize &&
         matchesCountry &&
-        matchesIntentSignal &&
+        matchesSubIndustry &&
         matchesVais
       );
     });
@@ -881,17 +943,68 @@ export default function ABMLAL() {
               {/* Search and Quick Filters */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-4">
-                  <Button variant="outline" size="sm">
-                    <Filter className="w-4 h-4 mr-2" />
-                    Filters
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    <Settings2 className="w-4 h-4 mr-2" />
-                    Columns
-                  </Button>
-                  <Button variant="outline" size="sm">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Settings2 className="w-4 h-4 mr-2" />
+                        Columns
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-56">
+                      <div className="p-2">
+                        <h4 className="text-sm font-medium mb-3">Columns</h4>
+                        <div className="space-y-2">
+                          {columns.map((column) => (
+                            <div
+                              key={column.key}
+                              className="flex items-center justify-between py-2"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <div className="w-4 h-4 flex items-center justify-center">
+                                  <div className="w-2 h-2 bg-gray-400 rounded-full" />
+                                </div>
+                                <label
+                                  htmlFor={`column-${column.key}`}
+                                  className="text-sm font-medium cursor-pointer"
+                                >
+                                  {column.label}
+                                </label>
+                              </div>
+                              <Switch
+                                id={`column-${column.key}`}
+                                checked={
+                                  columnVisibility[
+                                    column.key as keyof typeof columnVisibility
+                                  ]
+                                }
+                                onCheckedChange={() =>
+                                  toggleColumn(
+                                    column.key as keyof typeof columnVisibility,
+                                  )
+                                }
+                                className="data-[state=checked]:bg-valasys-orange"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen();
+                        setIsFullScreen(true);
+                      } else {
+                        document.exitFullscreen();
+                        setIsFullScreen(false);
+                      }
+                    }}
+                  >
                     <Maximize className="w-4 h-4 mr-2" />
-                    Full Screen
+                    {isFullScreen ? "Exit Full Screen" : "Full Screen"}
                   </Button>
                 </div>
                 <div className="flex items-center space-x-3 text-sm text-gray-500">
@@ -948,49 +1061,24 @@ export default function ABMLAL() {
                 </Select>
 
                 <Select
-                  value={filters.intentSignal || "all"}
+                  value={filters.subIndustry || "all"}
                   onValueChange={(value) =>
                     setFilters({
                       ...filters,
-                      intentSignal: value === "all" ? "" : value,
+                      subIndustry: value === "all" ? "" : value,
                     })
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Intent Signal" />
+                    <SelectValue placeholder="Sub Industry" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Signals</SelectItem>
-                    <SelectItem value="Super Strong">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-emerald-500 rounded-full mr-2"></div>
-                        Super Strong
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="Very Strong">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                        Very Strong
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="Strong">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                        Strong
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="Medium">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-orange-500 rounded-full mr-2"></div>
-                        Medium
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="Weak">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-                        Weak
-                      </div>
-                    </SelectItem>
+                    <SelectItem value="all">All Sub Industries</SelectItem>
+                    {subIndustries.map((si) => (
+                      <SelectItem key={si} value={si}>
+                        {si}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
 
@@ -1045,9 +1133,9 @@ export default function ABMLAL() {
                   onClick={() =>
                     setFilters({
                       industry: "",
+                      subIndustry: "",
                       companySize: "",
                       country: "",
-                      intentSignal: "",
                       vaisRange: { min: 0, max: 100 },
                     })
                   }
@@ -1106,184 +1194,215 @@ export default function ABMLAL() {
                           onCheckedChange={handleSelectAll}
                         />
                       </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-100 transition-colors"
-                        onClick={() => handleSort("companyName")}
-                      >
-                        <div className="flex items-center justify-between">
-                          Company Name
-                          <div className="ml-2">
-                            {sortField === "companyName" ? (
-                              <span className="text-valasys-orange">
-                                {sortDirection === "asc" ? "↑" : "↓"}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">↕</span>
-                            )}
+                      {columnVisibility.companyName && (
+                        <TableHead
+                          className="cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => handleSort("companyName")}
+                        >
+                          <div className="flex items-center justify-between">
+                            Company Name
+                            <div className="ml-2">
+                              {sortField === "companyName" ? (
+                                <span className="text-valasys-orange">
+                                  {sortDirection === "asc" ? "↑" : "↓"}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">↕</span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-100 transition-colors w-48"
-                        onClick={() => handleSort("vais")}
-                      >
-                        <div className="flex items-center justify-between">
-                          VAIS
-                          <div className="ml-2">
-                            {sortField === "vais" ? (
-                              <span className="text-valasys-orange">
-                                {sortDirection === "asc" ? "↑" : "↓"}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">↕</span>
-                            )}
+                        </TableHead>
+                      )}
+                      {columnVisibility.vais && (
+                        <TableHead
+                          className="cursor-pointer hover:bg-gray-100 transition-colors w-48"
+                          onClick={() => handleSort("vais")}
+                        >
+                          <div className="flex items-center justify-between">
+                            VAIS
+                            <div className="ml-2">
+                              {sortField === "vais" ? (
+                                <span className="text-valasys-orange">
+                                  {sortDirection === "asc" ? "↑" : "↓"}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">↕</span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-100 transition-colors"
-                        onClick={() => handleSort("intentSignal")}
-                      >
-                        <div className="flex items-center justify-between">
-                          Intent Signal
-                          <div className="ml-2">
-                            {sortField === "intentSignal" ? (
-                              <span className="text-valasys-orange">
-                                {sortDirection === "asc" ? "↑" : "↓"}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">↕</span>
-                            )}
+                        </TableHead>
+                      )}
+                      {columnVisibility.intentSignal && (
+                        <TableHead
+                          className="cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => handleSort("intentSignal")}
+                        >
+                          <div className="flex items-center justify-between">
+                            Intent Signal
+                            <div className="ml-2">
+                              {sortField === "intentSignal" ? (
+                                <span className="text-valasys-orange">
+                                  {sortDirection === "asc" ? "↑" : "↓"}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">↕</span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-100 transition-colors"
-                        onClick={() => handleSort("mainIndustry")}
-                      >
-                        <div className="flex items-center justify-between">
-                          Main Industry
-                          <div className="ml-2">
-                            {sortField === "mainIndustry" ? (
-                              <span className="text-valasys-orange">
-                                {sortDirection === "asc" ? "↑" : "↓"}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">↕</span>
-                            )}
+                        </TableHead>
+                      )}
+                      {columnVisibility.mainIndustry && (
+                        <TableHead
+                          className="cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => handleSort("mainIndustry")}
+                        >
+                          <div className="flex items-center justify-between">
+                            Main Industry
+                            <div className="ml-2">
+                              {sortField === "mainIndustry" ? (
+                                <span className="text-valasys-orange">
+                                  {sortDirection === "asc" ? "↑" : "↓"}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">↕</span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-100 transition-colors"
-                        onClick={() => handleSort("subIndustry")}
-                      >
-                        <div className="flex items-center justify-between">
-                          Sub Industry
-                          <div className="ml-2">
-                            {sortField === "subIndustry" ? (
-                              <span className="text-valasys-orange">
-                                {sortDirection === "asc" ? "↑" : "↓"}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">↕</span>
-                            )}
+                        </TableHead>
+                      )}
+                      {columnVisibility.subIndustry && (
+                        <TableHead
+                          className="cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => handleSort("subIndustry")}
+                        >
+                          <div className="flex items-center justify-between">
+                            Sub Industry
+                            <div className="ml-2">
+                              {sortField === "subIndustry" ? (
+                                <span className="text-valasys-orange">
+                                  {sortDirection === "asc" ? "↑" : "↓"}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">↕</span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-100 transition-colors"
-                        onClick={() => handleSort("companySize")}
-                      >
-                        <div className="flex items-center justify-between">
-                          Company Size
-                          <div className="ml-2">
-                            {sortField === "companySize" ? (
-                              <span className="text-valasys-orange">
-                                {sortDirection === "asc" ? "↑" : "↓"}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">↕</span>
-                            )}
+                        </TableHead>
+                      )}
+                      {columnVisibility.companySize && (
+                        <TableHead
+                          className="cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => handleSort("companySize")}
+                        >
+                          <div className="flex items-center justify-between">
+                            Company Size
+                            <div className="ml-2">
+                              {sortField === "companySize" ? (
+                                <span className="text-valasys-orange">
+                                  {sortDirection === "asc" ? "↑" : "↓"}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">↕</span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-100 transition-colors"
-                        onClick={() => handleSort("revenue")}
-                      >
-                        <div className="flex items-center justify-between">
-                          Revenue
-                          <div className="ml-2">
-                            {sortField === "revenue" ? (
-                              <span className="text-valasys-orange">
-                                {sortDirection === "asc" ? "↑" : "↓"}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">↕</span>
-                            )}
+                        </TableHead>
+                      )}
+                      {columnVisibility.revenue && (
+                        <TableHead
+                          className="cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => handleSort("revenue")}
+                        >
+                          <div className="flex items-center justify-between">
+                            Revenue
+                            <div className="ml-2">
+                              {sortField === "revenue" ? (
+                                <span className="text-valasys-orange">
+                                  {sortDirection === "asc" ? "↑" : "↓"}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">↕</span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-100 transition-colors"
-                        onClick={() => handleSort("country")}
-                      >
-                        <div className="flex items-center justify-between">
-                          Country
-                          <div className="ml-2">
-                            {sortField === "country" ? (
-                              <span className="text-valasys-orange">
-                                {sortDirection === "asc" ? "↑" : "↓"}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">↕</span>
-                            )}
+                        </TableHead>
+                      )}
+                      {columnVisibility.country && (
+                        <TableHead
+                          className="cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => handleSort("country")}
+                        >
+                          <div className="flex items-center justify-between">
+                            Country
+                            <div className="ml-2">
+                              {sortField === "country" ? (
+                                <span className="text-valasys-orange">
+                                  {sortDirection === "asc" ? "↑" : "↓"}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">↕</span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </TableHead>
+                        </TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isPremiumPage
-                      ? // Show blurred placeholder rows for premium page
-                        Array.from({ length: 5 }, (_, index) => (
+                      ? Array.from({ length: 5 }, (_, index) => (
                           <TableRow key={`premium-${index}`}>
                             <TableCell className="pl-6">
                               <Checkbox disabled />
                             </TableCell>
-                            <TableCell className="font-medium text-gray-400">
-                              Premium Company {index + 1}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <div className="flex justify-center">
-                                <CircularProgress
-                                  value={85 + index * 2}
-                                  size={56}
-                                  strokeWidth={4}
-                                />
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge className="bg-gray-200 text-gray-400">
-                                Premium Signal
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-sm text-gray-400">
-                              Premium Industry
-                            </TableCell>
-                            <TableCell className="text-sm text-gray-400">
-                              Premium Sub-Industry
-                            </TableCell>
-                            <TableCell className="text-sm text-gray-400">
-                              Premium Size
-                            </TableCell>
-                            <TableCell className="text-sm text-gray-400">
-                              Premium Revenue
-                            </TableCell>
-                            <TableCell className="text-sm text-gray-400">
-                              Premium Country
-                            </TableCell>
+                            {columnVisibility.companyName && (
+                              <TableCell className="font-medium text-gray-400">
+                                Premium Company {index + 1}
+                              </TableCell>
+                            )}
+                            {columnVisibility.vais && (
+                              <TableCell className="text-center">
+                                <div className="flex justify-center">
+                                  <CircularProgress
+                                    value={85 + index * 2}
+                                    size={56}
+                                    strokeWidth={4}
+                                  />
+                                </div>
+                              </TableCell>
+                            )}
+                            {columnVisibility.intentSignal && (
+                              <TableCell>
+                                <Badge className="bg-gray-200 text-gray-400">
+                                  Premium Signal
+                                </Badge>
+                              </TableCell>
+                            )}
+                            {columnVisibility.mainIndustry && (
+                              <TableCell className="text-sm text-gray-400">
+                                Premium Industry
+                              </TableCell>
+                            )}
+                            {columnVisibility.subIndustry && (
+                              <TableCell className="text-sm text-gray-400">
+                                Premium Sub-Industry
+                              </TableCell>
+                            )}
+                            {columnVisibility.companySize && (
+                              <TableCell className="text-sm text-gray-400">
+                                Premium Size
+                              </TableCell>
+                            )}
+                            {columnVisibility.revenue && (
+                              <TableCell className="text-sm text-gray-400">
+                                Premium Revenue
+                              </TableCell>
+                            )}
+                            {columnVisibility.country && (
+                              <TableCell className="text-sm text-gray-400">
+                                Premium Country
+                              </TableCell>
+                            )}
                           </TableRow>
                         ))
                       : paginatedData.map((item) => (
@@ -1302,48 +1421,70 @@ export default function ABMLAL() {
                                 }
                               />
                             </TableCell>
-                            <TableCell className="font-medium text-valasys-gray-900">
-                              {item.companyName}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <div className="flex justify-center">
-                                <CircularProgress
-                                  value={item.vais}
-                                  size={56}
-                                  strokeWidth={4}
+                            {columnVisibility.companyName && (
+                              <TableCell className="font-medium text-valasys-gray-900">
+                                <button
+                                  className="flex items-center space-x-2 text-black hover:text-gray-800 hover:underline focus:outline-none group"
+                                  onClick={() => openDetails(item)}
+                                >
+                                  <span>{item.companyName}</span>
+                                  <ExternalLink className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
+                                </button>
+                              </TableCell>
+                            )}
+                            {columnVisibility.vais && (
+                              <TableCell className="text-center">
+                                <div className="flex justify-center">
+                                  <CircularProgress
+                                    value={item.vais}
+                                    size={56}
+                                    strokeWidth={4}
+                                  />
+                                </div>
+                              </TableCell>
+                            )}
+                            {columnVisibility.intentSignal && (
+                              <TableCell>
+                                <IntentSignalChart
+                                  data={{
+                                    compositeScore: item.compositeScore,
+                                    deltaScore: item.deltaScore,
+                                    matchedTopics: item.matchedTopics,
+                                    intentSignal: item.intentSignal,
+                                    companyName: item.companyName,
+                                    vais: item.vais,
+                                    revenue: item.revenue,
+                                    city: item.city,
+                                    relatedTopics: item.relatedTopics,
+                                  }}
                                 />
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <IntentSignalChart
-                                data={{
-                                  compositeScore: item.compositeScore,
-                                  deltaScore: item.deltaScore,
-                                  matchedTopics: item.matchedTopics,
-                                  intentSignal: item.intentSignal,
-                                  companyName: item.companyName,
-                                  vais: item.vais,
-                                  revenue: item.revenue,
-                                  city: item.city,
-                                  relatedTopics: item.relatedTopics,
-                                }}
-                              />
-                            </TableCell>
-                            <TableCell className="text-sm text-gray-700">
-                              {item.mainIndustry}
-                            </TableCell>
-                            <TableCell className="text-sm text-gray-700">
-                              {item.subIndustry}
-                            </TableCell>
-                            <TableCell className="text-sm text-gray-700">
-                              {item.companySize}
-                            </TableCell>
-                            <TableCell className="text-sm text-gray-700">
-                              {item.revenue}
-                            </TableCell>
-                            <TableCell className="text-sm text-gray-700">
-                              {item.country}
-                            </TableCell>
+                              </TableCell>
+                            )}
+                            {columnVisibility.mainIndustry && (
+                              <TableCell className="text-sm text-gray-700">
+                                {item.mainIndustry}
+                              </TableCell>
+                            )}
+                            {columnVisibility.subIndustry && (
+                              <TableCell className="text-sm text-gray-700">
+                                {item.subIndustry}
+                              </TableCell>
+                            )}
+                            {columnVisibility.companySize && (
+                              <TableCell className="text-sm text-gray-700">
+                                {item.companySize}
+                              </TableCell>
+                            )}
+                            {columnVisibility.revenue && (
+                              <TableCell className="text-sm text-gray-700">
+                                {item.revenue}
+                              </TableCell>
+                            )}
+                            {columnVisibility.country && (
+                              <TableCell className="text-sm text-gray-700">
+                                {item.country}
+                              </TableCell>
+                            )}
                           </TableRow>
                         ))}
                   </TableBody>
@@ -1453,6 +1594,446 @@ export default function ABMLAL() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Slide-in Details Panel */}
+          <div
+            className={cn(
+              "fixed inset-0 z-50",
+              detailsOpen ? "pointer-events-auto" : "pointer-events-none",
+            )}
+          >
+            <div
+              className={cn(
+                "absolute inset-0 bg-black/30 transition-opacity",
+                detailsOpen ? "opacity-100" : "opacity-0",
+              )}
+              onClick={closeDetails}
+            />
+            <div
+              className={cn(
+                "absolute right-0 top-0 h-full w-[60%] bg-white shadow-xl transition-transform duration-300",
+                detailsOpen ? "translate-x-0" : "translate-x-full",
+              )}
+            >
+              <div className="h-full overflow-auto flex flex-col">
+                <div className="p-4 border-b bg-gradient-to-r from-valasys-orange to-valasys-orange-light text-white">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
+                        <Building className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <div className="text-lg font-bold">
+                            {activeCompany?.companyName}
+                          </div>
+                          <Badge
+                            className={cn(
+                              "text-xs px-2 py-1 font-medium",
+                              getIntentSignalColor(
+                                activeCompany?.intentSignal || "",
+                              ),
+                            )}
+                          >
+                            {activeCompany?.intentSignal}
+                          </Badge>
+                        </div>
+                        <div className="text-xs opacity-90">Overview</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={closeDetails}
+                      className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center backdrop-blur-sm transition-colors"
+                    >
+                      <X className="w-4 h-4 text-white" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-4 space-y-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <Card>
+                      <CardContent className="p-3 text-center">
+                        <div className="text-xs text-gray-600">VAIS Score</div>
+                        <div className="text-xl font-bold">
+                          {activeCompany?.companyName === "BBCL"
+                            ? 89
+                            : Math.round(activeCompany?.compositeScore ?? 0)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-3 text-center">
+                        <div className="text-xs text-gray-600">Evaluation</div>
+                        <div className="text-xl font-bold">
+                          {activeCompany?.companyName === "BBCL"
+                            ? "93%"
+                            : `${Math.round(activeCompany?.vais ?? 0)}%`}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-3 text-center">
+                        <div className="text-xs text-gray-600">
+                          Company Size
+                        </div>
+                        <div className="text-sm font-semibold">
+                          {activeCompany?.companySize}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-3 text-center">
+                        <div className="text-xs text-gray-600">
+                          Company Revenue
+                        </div>
+                        <div className="text-sm font-semibold">
+                          {activeCompany?.revenue}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div>
+                      <div className="px-3 py-2 bg-gradient-to-r from-blue-50 to-blue-100 border-l-4 border-blue-300 text-blue-700 text-sm font-semibold rounded-t-lg">
+                        Contact & Business Info
+                      </div>
+                      <div className="border border-t-0 rounded-b-lg p-3 grid grid-cols-2 gap-3 text-sm bg-white shadow-sm">
+                        <div>
+                          <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                            <MapPin className="w-4 h-4" />
+                            <span>HQ</span>
+                          </div>
+                          <div className="font-medium">
+                            {activeCompany?.companyName === "BBCL"
+                              ? "San Rafael, California, United States"
+                              : activeCompany?.city}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                            <Phone className="w-4 h-4" />
+                            <span>Phone</span>
+                          </div>
+                          <div className="font-medium">
+                            {activeCompany?.companyName === "BBCL"
+                              ? "+1-415-507-5000"
+                              : "N/A"}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                            <Globe className="w-4 h-4" />
+                            <span>Country</span>
+                          </div>
+                          <div className="font-medium">
+                            {activeCompany?.country}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                            <Calendar className="w-4 h-4" />
+                            <span>Founded</span>
+                          </div>
+                          <div className="font-medium">
+                            {activeCompany?.companyName === "BBCL"
+                              ? "1982"
+                              : "—"}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                            <Briefcase className="w-4 h-4" />
+                            <span>Business Model</span>
+                          </div>
+                          <div className="font-medium">
+                            {activeCompany?.companyName === "BBCL"
+                              ? "B2B"
+                              : "—"}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                            <Building className="w-4 h-4" />
+                            <span>Business Services</span>
+                          </div>
+                          <div className="font-medium">
+                            {activeCompany?.mainIndustry}
+                          </div>
+                        </div>
+                        <div className="col-span-2">
+                          {activeCompany?.companyName === "BBCL" && (
+                            <div className="flex items-center space-x-2">
+                              <LinkIcon className="w-4 h-4 text-gray-500" />
+                              <a
+                                className="text-blue-600 hover:underline"
+                                href="#"
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                www.bbcl.com
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="px-3 py-2 bg-gradient-to-r from-green-50 to-green-100 border-l-4 border-green-300 text-green-700 text-sm font-semibold rounded-t-lg">
+                        AI Intent Analysis
+                      </div>
+                      <div className="border border-t-0 rounded-b-lg p-3 space-y-2 text-sm bg-white shadow-sm">
+                        <div>
+                          <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                            <Brain className="w-4 h-4" />
+                            <span>Intent</span>
+                          </div>
+                          <div className="font-medium">
+                            {activeCompany?.companyName === "BBCL"
+                              ? "This lead is in the evaluation stage, indicating a high likelihood to buy. Key activities include requesting product demo."
+                              : activeCompany?.intentSignal}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                            <Activity className="w-4 h-4" />
+                            <span>Recent Activities</span>
+                          </div>
+                          <ul className="list-disc pl-5 space-y-1">
+                            <li>Requested product demo for AutoCAD — Jun 15</li>
+                            <li>Downloaded technical whitepaper — Jun 12</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="px-3 py-2 bg-gradient-to-r from-purple-50 to-purple-100 border-l-4 border-purple-300 text-purple-700 text-sm font-semibold rounded-t-lg">
+                        Technology & Competition
+                      </div>
+                      <div className="border border-t-0 rounded-b-lg p-3 space-y-3 text-sm bg-white shadow-sm">
+                        <div>
+                          <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                            <Cpu className="w-4 h-4" />
+                            <span>Technologies</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {(activeCompany?.companyName === "BBCL"
+                              ? [
+                                  "AutoCAD",
+                                  "Revit",
+                                  "Maya",
+                                  "3ds Max",
+                                  "+2 more",
+                                ]
+                              : activeCompany?.relatedTopics || []
+                            ).map((t) => (
+                              <Badge
+                                key={t}
+                                variant="secondary"
+                                className="bg-gray-100"
+                              >
+                                {t}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2 text-gray-500 mb-1">
+                            <Target className="w-4 h-4" />
+                            <span>Key Competitors</span>
+                          </div>
+                          <div className="text-sm">
+                            Dassault Systèmes, PTC, Trimble, Adobe, Siemens, PLM
+                            Software
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Additional Details from attachment */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
+                      <div>
+                        <div className="px-3 py-2 bg-gradient-to-r from-rose-50 to-rose-100 border-l-4 border-rose-300 text-rose-700 text-sm font-semibold rounded-t-lg">
+                          Key People
+                        </div>
+                        <div className="border border-t-0 rounded-b-lg p-3 space-y-2 text-sm bg-white shadow-sm">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2 text-gray-700">
+                              <User className="w-4 h-4 text-gray-500" />
+                              <span>Sarah Chen</span>
+                            </div>
+                            <span className="text-gray-500">
+                              Chief Executive Officer
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2 text-gray-700">
+                              <Cpu className="w-4 h-4 text-gray-500" />
+                              <span>Michael Rodriguez</span>
+                            </div>
+                            <span className="text-gray-500">
+                              Chief Technology Officer
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2 text-gray-700">
+                              <Crown className="w-4 h-4 text-gray-500" />
+                              <span>Emily Johnson</span>
+                            </div>
+                            <span className="text-gray-500">
+                              Chief Financial Officer
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="px-3 py-2 bg-gradient-to-r from-emerald-50 to-emerald-100 border-l-4 border-emerald-300 text-emerald-700 text-sm font-semibold rounded-t-lg">
+                          Major Investors
+                        </div>
+                        <div className="border border-t-0 rounded-b-lg p-3 space-y-2 text-sm bg-white shadow-sm">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2 text-gray-700">
+                              <PiggyBank className="w-4 h-4 text-gray-500" />
+                              <span>Vanguard Group</span>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className="bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            >
+                              8.2%
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2 text-gray-700">
+                              <PiggyBank className="w-4 h-4 text-gray-500" />
+                              <span>BlackRock Inc.</span>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className="bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            >
+                              6.7%
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2 text-gray-700">
+                              <PiggyBank className="w-4 h-4 text-gray-500" />
+                              <span>Sequoia Capital</span>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className="bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            >
+                              4.1%
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="px-3 py-2 bg-gradient-to-r from-sky-50 to-sky-100 border-l-4 border-sky-300 text-sky-700 text-sm font-semibold rounded-t-lg">
+                          Stock Info
+                        </div>
+                        <div className="border border-t-0 rounded-b-lg p-3 grid grid-cols-2 gap-3 text-sm bg-white shadow-sm">
+                          <div>
+                            <div className="text-gray-500 mb-1">Price</div>
+                            <div className="font-semibold text-gray-900">
+                              $145.32
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500 mb-1">Cap</div>
+                            <div className="font-semibold text-gray-900">
+                              $12.5B
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500 mb-1">Symbol</div>
+                            <div className="font-semibold text-gray-900">
+                              BBCL
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500 mb-1">Exchange</div>
+                            <div className="font-semibold text-gray-900">
+                              NASDAQ
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="px-3 py-2 bg-gradient-to-r from-amber-50 to-amber-100 border-l-4 border-amber-300 text-amber-700 text-sm font-semibold rounded-t-lg">
+                          Recent News
+                        </div>
+                        <div className="border border-t-0 rounded-b-lg p-3 space-y-3 text-sm bg-white shadow-sm">
+                          <div className="flex items-start space-x-2">
+                            <Newspaper className="w-4 h-4 text-gray-500 mt-0.5" />
+                            <div>
+                              <div className="font-medium text-gray-900">
+                                BBCL Announces Q3 2024 Financial Results
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Business Wire • 2024-06-10
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-start space-x-2">
+                            <Newspaper className="w-4 h-4 text-gray-500 mt-0.5" />
+                            <div>
+                              <div className="font-medium text-gray-900">
+                                New Partnership with Tech Innovators Inc.
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                TechCrunch • 2024-06-05
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="px-3 py-2 bg-gradient-to-r from-cyan-50 to-cyan-100 border-l-4 border-cyan-300 text-cyan-700 text-sm font-semibold rounded-t-lg">
+                          Sources & Links
+                        </div>
+                        <div className="border border-t-0 rounded-b-lg p-3 space-y-2 text-sm bg-white shadow-sm">
+                          <div className="flex flex-wrap gap-2">
+                            <Badge variant="secondary" className="bg-gray-100">
+                              Newsletter
+                            </Badge>
+                            <Badge variant="secondary" className="bg-gray-100">
+                              Blog
+                            </Badge>
+                          </div>
+                          <div className="space-y-1">
+                            <a
+                              href="#"
+                              className="flex items-center space-x-2 text-blue-600 hover:underline"
+                            >
+                              <LinkIcon className="w-4 h-4" />
+                              <span>bbcl.com</span>
+                            </a>
+                            <a
+                              href="#"
+                              className="flex items-center space-x-2 text-blue-600 hover:underline"
+                            >
+                              <LinkIcon className="w-4 h-4" />
+                              <span>en.wikipedia.org/wiki/BBCL</span>
+                            </a>
+                            <div className="text-gray-500">+ 2 more</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </DashboardLayout>
     );
@@ -1971,57 +2552,58 @@ export default function ABMLAL() {
         </div>
 
         {/* AI Suggestions Panel */}
-        <div
-          className={cn(
-            "transition-all duration-300 hidden lg:block",
-            aiPanelCollapsed ? "col-span-0 overflow-hidden" : "col-span-3",
-          )}
-        >
-          <Card className="h-full shadow-lg sticky top-6">
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Bot className="w-5 h-5 text-valasys-orange" />
-                  <CardTitle className="text-lg font-semibold text-gray-900">
-                    AI Suggestions
-                  </CardTitle>
+        {!aiPanelCollapsed && (
+          <div
+            className={cn(
+              "transition-all duration-300 hidden lg:block col-span-3",
+            )}
+          >
+            <Card className="h-full shadow-lg sticky top-6">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Bot className="w-5 h-5 text-valasys-orange" />
+                    <CardTitle className="text-lg font-semibold text-gray-900">
+                      AI Suggestions
+                    </CardTitle>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAiPanelCollapsed(!aiPanelCollapsed)}
+                    className="h-8 w-8 p-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setAiPanelCollapsed(!aiPanelCollapsed)}
-                  className="h-8 w-8 p-0"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {aiSuggestions.map((suggestion) => (
-                <div
-                  key={suggestion.id}
-                  className="p-4 bg-gradient-to-r from-orange-50 to-orange-100 rounded-2xl border border-orange-200"
-                >
-                  <div className="flex items-start space-x-3">
-                    <Lightbulb className="w-5 h-5 text-valasys-orange flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 space-y-3">
-                      <p className="text-sm text-gray-700 leading-relaxed">
-                        {suggestion.text}
-                      </p>
-                      <Button
-                        size="sm"
-                        className="bg-valasys-orange hover:bg-orange-600 text-white text-xs h-8 px-3"
-                      >
-                        {suggestion.action}
-                        <ChevronRight className="w-3 h-3 ml-1" />
-                      </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {aiSuggestions.map((suggestion) => (
+                  <div
+                    key={suggestion.id}
+                    className="p-4 bg-gradient-to-r from-orange-50 to-orange-100 rounded-2xl border border-orange-200"
+                  >
+                    <div className="flex items-start space-x-3">
+                      <Lightbulb className="w-5 h-5 text-valasys-orange flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 space-y-3">
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                          {suggestion.text}
+                        </p>
+                        <Button
+                          size="sm"
+                          className="bg-valasys-orange hover:bg-orange-600 text-white text-xs h-8 px-3"
+                        >
+                          {suggestion.action}
+                          <ChevronRight className="w-3 h-3 ml-1" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Collapsed AI Panel Toggle */}
         {aiPanelCollapsed && (
