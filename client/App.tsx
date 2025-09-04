@@ -44,7 +44,6 @@ import PublicOnly from "./routes/PublicOnly";
 
 const queryClient = new QueryClient();
 
-// App initialization component to handle Redux initialization
 const AppInitializer = () => {
   useEffect(() => {
     store.dispatch(initializeAuth());
@@ -137,7 +136,6 @@ if (import.meta.hot) {
     hotData.root = root;
   }
 } else {
-  // Production: create root normally
   root = createRoot(container);
 }
 

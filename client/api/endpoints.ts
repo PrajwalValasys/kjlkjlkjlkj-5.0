@@ -123,8 +123,8 @@ export const USER_MANAGEMENT_ENDPOINTS = {
 
 // Miscellaneous endpoints
 export const MISC_ENDPOINTS = {
-  GET_ALL_TOPICS: `${BASE_URL}/topics`,
-  GET_TOPICS_WITH_URL: `${BASE_URL}/get_url_topics`,
+  GET_ALL_TOPICS: `${BASE_URL}/topics/`,
+  GET_TOPICS_WITH_URL: `${BASE_URL}/get_url_topics/`,
   GET_ALL_COUNTRIES: `${BASE_URL}/get_all_country`,
   GET_SAVED_SEARCHES: `${BASE_URL}/vaisfilter`,
   GET_FAQ: `${BASE_URL}/get-faq/`,

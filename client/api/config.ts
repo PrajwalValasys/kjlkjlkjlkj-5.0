@@ -24,12 +24,15 @@ const baseUrls = {
 };
 
 // Prefer an explicit VITE_API_BASE_URL if provided
-export const API_BASE_URL = getEnvVar('VITE_API_BASE_URL', '') || (baseUrls[BUILD_ENV as keyof typeof baseUrls] || baseUrls[0]);
+const stripTrailingSlash = (u: string) => (u ? u.replace(/\/+$/u, '') : u);
+export const API_BASE_URL = stripTrailingSlash(
+  getEnvVar('VITE_API_BASE_URL', '') || (baseUrls[BUILD_ENV as keyof typeof baseUrls] || baseUrls[0]),
+);
 
 // API Configuration
 export const API_CONFIG = {
   baseURL: API_BASE_URL,
-  timeout: parseInt(getEnvVar('REACT_APP_API_TIMEOUT', getEnvVar('VITE_API_TIMEOUT', '30000'))),
+  timeout: parseInt(getEnvVar('REACT_APP_API_TIMEOUT', getEnvVar('VITE_API_TIMEOUT', '300000'))),
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json'
@@ -96,6 +99,23 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+// Helpful debug: surface failing request info to console for easier troubleshooting
+apiClient.interceptors.response.use(undefined, (error) => {
+  try {
+    const cfg = error?.config || {};
+    console.error('[apiClient] request failed', {
+      url: cfg.url,
+      method: cfg.method,
+      status: error?.response?.status,
+      responseData: error?.response?.data,
+      message: error?.message,
+    });
+  } catch (e) {
+    // swallow
+  }
+  return Promise.reject(error);
+});
 
 // API response types
 export interface ApiResponse<T = any> {

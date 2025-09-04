@@ -27,6 +27,13 @@ const icpService = {
     const response = await apiClient.get(url);
     return response.data;
   },
+  // Fetch product category for a given product subcategory id
+  getProductsCategoryForSubcategory: async (subCategoryId: string | number) => {
+    const id = String(subCategoryId);
+    const url = `${API_ENDPOINTS.ICP.GET_PRODUCTS_CATEGORY}/${encodeURIComponent(id)}`;
+    const response = await apiClient.get(url);
+    return response.data;
+  },
   // Get list of countries / geolocations (from miscellaneous endpoints)
   getAllCountries: async () => {
     // endpoint lives under MISC in endpoints.ts
@@ -36,6 +43,18 @@ const icpService = {
   // Get saved searches / filters for the user
   getSavedSearches: async () => {
     const response = await apiClient.get((API_ENDPOINTS as any).MISC?.GET_SAVED_SEARCHES || '/vaisfilter');
+    return response.data;
+  },
+  // Fetch all topics
+  getAllTopics: async () => {
+    const response = await apiClient.get(API_ENDPOINTS.MISC.GET_ALL_TOPICS);
+    return response.data;
+  },
+
+  // Fetch topics by URL (GET_TOPICS_WITH_URL?topic_url=...)
+  getTopicsByUrl: async (topicUrl: string) => {
+    const url = `${API_ENDPOINTS.MISC.GET_TOPICS_WITH_URL}?topic_url=${encodeURIComponent(topicUrl)}`;
+    const response = await apiClient.get(url);
     return response.data;
   },
 };

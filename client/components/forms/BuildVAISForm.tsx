@@ -1,8 +1,10 @@
-import React, { useState, useRef } from "react";
-import { useDispatch } from 'react-redux';
+import React, { useState, useRef, useEffect } from "react";
+import { useDispatch, useSelector } from 'react-redux';
 import { setICPScore } from '@/store/reducers/icpScoreSlice';
 import { icpService } from '@/api/services';
+import { authService } from '@/api/services/authService';
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -56,11 +58,26 @@ import { cn } from "@/lib/utils";
 import { FloatingStatsWidget } from "@/components/ui/floating-stats-widget";
 
 interface FormData {
-  productSubcategory: string;
+  productSubcategory: string; // stores id or name depending on source
   productCategory: string;
   geolocation: string[];
   intentTopics: string[];
   uploadedFile?: File;
+}
+
+interface Topic {
+  id: number;
+  name: string;
+  topic_id: string;
+  category: string;
+  theme: string;
+  is_active: boolean;
+  label: string;
+}
+
+interface FilterOption {
+  label: string;
+  value: string;
 }
 
 interface SavedSearch {
@@ -102,228 +119,16 @@ const DEFAULT_GEOLOCATIONS = [
   "Global",
 ];
 
-const filterTopics = [
-  "Supply Chain",
-  "Financial",
-  "Technology",
-  "Telecommunications",
-  "Health Tech",
-  "Sales",
-  "Emerging Tech",
-  "Mobile",
-  "Other",
-  "Security",
-  "Tools & Electronics",
-  "Business Services",
-  "Corporate Finance",
-  "Controls & Standards",
-  "Finance IT",
-  "Personal Finance",
-  "Operations",
-  "Business Solutions",
-  "Enterprise",
-  "Standards & Regulatory",
-  "Disease Control",
-  "HR",
-  "AgriTech",
-  "Water Quality",
-  "Media & Advertising",
-  "Compliance & Governance",
-  "Legal & Regulatory",
-  "Policy & Culture",
-  "Staff Departure",
-  "Branding",
-  "Content",
-  "Creativity Software",
-  "Search Marketing",
-  "Certifications",
-  "Desktop",
-  "Email",
-  "Messaging",
-  "Transportation",
-  "Personal Computer",
-  "Trends",
-  "Aerospace",
-  "Gaming",
-  "Medical Education",
-  "Landmark Cases",
-  "Marketing",
-  "Medical Testing",
-  "Chromatography",
-  "Lab Automation",
-  "Lab Data Management & Analysis",
-  "Jail & Prison",
-  "Energy & Construction",
-  "Copyright",
-  "Design Engineering",
-  "Health Conditions",
-];
-
-const filterThemes = [
-  "Business",
-  "Energy/Construction/Manufacturing",
-  "Company",
-  "Technology",
-  "Healthcare",
-  "Finance",
-  "BioTech",
-  "Human Resources",
-  "Legal",
-  "Marketing",
-  "Products",
-  "Government",
-  "Retail",
-  "Media",
-  "Travel",
-  "Consumer Technology",
-  "Events & Conferences",
-  "Arts & Entertainment",
-  "Beauty & Fitness",
-  "Food & Drink",
-  "Hobbies & Leisure",
-  "Home & Garden",
-  "Education",
-  "People & Society",
-  "Pets & Animals",
-  "Science",
-  "Shopping",
-  "Sports",
-];
-
-const intentTopics = [
-  {
-    name: "Request for Information (RFI)",
-    description: "Prospects actively seeking product information",
-    volume: "High",
-    conversion: "85%",
-  },
-  {
-    name: "Pricing Inquiry",
-    description: "Ready-to-buy prospects comparing prices",
-    volume: "Medium",
-    conversion: "92%",
-  },
-  {
-    name: "Product Demo",
-    description: "Qualified prospects wanting to see the product",
-    volume: "Medium",
-    conversion: "88%",
-  },
-  {
-    name: "Technical Support",
-    description: "Existing customers needing assistance",
-    volume: "High",
-    conversion: "65%",
-  },
-  {
-    name: "Partnership Opportunities",
-    description: "Businesses seeking strategic partnerships",
-    volume: "Low",
-    conversion: "78%",
-  },
-  {
-    name: "Implementation Services",
-    description: "Prospects needing implementation help",
-    volume: "Medium",
-    conversion: "90%",
-  },
-  {
-    name: "Training & Certification",
-    description: "Organizations wanting team training",
-    volume: "Medium",
-    conversion: "82%",
-  },
-  {
-    name: "Custom Development",
-    description: "Prospects needing customization",
-    volume: "Low",
-    conversion: "95%",
-  },
-  {
-    name: "Integration Support",
-    description: "Technical prospects needing integration help",
-    volume: "Medium",
-    conversion: "87%",
-  },
-  {
-    name: "Competitive Analysis",
-    description: "Prospects comparing solutions",
-    volume: "High",
-    conversion: "70%",
-  },
-  {
-    name: "Case Studies",
-    description: "Prospects seeking proof of success",
-    volume: "High",
-    conversion: "75%",
-  },
-  {
-    name: "Compliance & Security",
-    description: "Security-focused prospects",
-    volume: "Medium",
-    conversion: "89%",
-  },
-  {
-    name: "Migration Services",
-    description: "Companies looking to migrate systems",
-    volume: "Medium",
-    conversion: "86%",
-  },
-  {
-    name: "ROI Assessment",
-    description: "Prospects evaluating return on investment",
-    volume: "High",
-    conversion: "79%",
-  },
-  {
-    name: "Vendor Evaluation",
-    description: "Companies comparing multiple vendors",
-    volume: "High",
-    conversion: "73%",
-  },
-  {
-    name: "Proof of Concept",
-    description: "Technical prospects wanting to test solutions",
-    volume: "Medium",
-    conversion: "91%",
-  },
-  {
-    name: "Scalability Planning",
-    description: "Growing companies planning for scale",
-    volume: "Low",
-    conversion: "84%",
-  },
-  {
-    name: "Budget Planning",
-    description: "Finance teams planning technology budgets",
-    volume: "Medium",
-    conversion: "77%",
-  },
-  {
-    name: "Technology Roadmap",
-    description: "Strategic planning for technology adoption",
-    volume: "Low",
-    conversion: "88%",
-  },
-  {
-    name: "Disaster Recovery",
-    description: "Companies planning business continuity",
-    volume: "Medium",
-    conversion: "83%",
-  },
-  {
-    name: "Performance Optimization",
-    description: "Organizations seeking to improve efficiency",
-    volume: "High",
-    conversion: "81%",
-  },
-  {
-    name: "Cloud Migration",
-    description: "Companies moving to cloud infrastructure",
-    volume: "High",
-    conversion: "85%",
-  },
-];
+// Utility function to map API response to frontend shape
+const mapTopicToFrontend = (apiTopic: any): Topic => ({
+  id: apiTopic.id,
+  name: apiTopic.name,
+  topic_id: apiTopic.topic_id,
+  category: apiTopic.category || "Other",
+  theme: apiTopic.theme || "Other",
+  is_active: !!apiTopic.is_active,
+  label: apiTopic.name
+});
 
 const steps = [
   { id: 1, name: "Product Configuration", icon: Tag },
@@ -334,6 +139,12 @@ const steps = [
 
 export default function BuildVAISForm() {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const auth = useSelector((state: any) => state.auth);
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Form state
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<FormData>({
     productSubcategory: "",
@@ -342,45 +153,117 @@ export default function BuildVAISForm() {
     intentTopics: [],
   });
 
+  // Topics state
+  const [allTopics, setAllTopics] = useState<Topic[]>([]);
+  const [availableTopics, setAvailableTopics] = useState<Topic[]>([]);
+  const [selectedTopics, setSelectedTopics] = useState<Topic[]>([]);
+  const [filteredTopics, setFilteredTopics] = useState<Topic[]>([]);
+  const [loadingTopics, setLoadingTopics] = useState(false);
+  const [topicUrlList, setTopicUrlList] = useState<Topic[]>([]);
+  
+  // Filter state
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedTheme, setSelectedTheme] = useState("");
+  const [categoryOptions, setCategoryOptions] = useState<FilterOption[]>([]);
+  const [themeOptions, setThemeOptions] = useState<FilterOption[]>([]);
+  
+  // Other UI state
   const [geoSearchTerm, setGeoSearchTerm] = useState("");
-  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [generateTopicsInput, setGenerateTopicsInput] = useState("");
-  const [filterTopic, setFilterTopic] = useState("");
-  const [filterTheme, setFilterTheme] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [fileStatus, setFileStatus] = useState<"none" | "valid" | "invalid">(
-    "none",
-  );
-  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([
-    {
-      id: "1",
-      name: "Software Campaign Q3",
-      formData: {
-        productSubcategory: "Software Solutions",
-        productCategory: "Enterprise Software",
-        geolocation: ["North America"],
-        intentTopics: ["Pricing Inquiry", "Product Demo"],
-      },
-      createdAt: new Date("2024-08-15"),
-    },
-  ]);
+  const [fileStatus, setFileStatus] = useState<"none" | "valid" | "invalid">("none");
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [newSearchName, setNewSearchName] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const dispatch = useDispatch();
-  const [productCategories, setProductCategories] = useState<string[]>(DEFAULT_PRODUCT_CATEGORIES);
-  const [productSubcategories, setProductSubcategories] = useState<string[]>(DEFAULT_PRODUCT_SUBCATEGORIES);
-  const [geolocations, setGeolocations] = useState<string[]>(DEFAULT_GEOLOCATIONS);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  
+  // Product data state
+  const [productCategories, setProductCategories] = useState<string[]>(DEFAULT_PRODUCT_CATEGORIES);
+  const [productSubcategories, setProductSubcategories] = useState<any[]>(DEFAULT_PRODUCT_SUBCATEGORIES.map((s) => ({ id: s, product_sub_category_name: s })));
+  const [geolocations, setGeolocations] = useState<string[]>(DEFAULT_GEOLOCATIONS);
 
-  React.useEffect(() => {
+  // Load topics on component mount
+  useEffect(() => {
+    const loadTopics = async () => {
+      console.log("BuildVAISForm mounted, checking authentication...");
+      console.log("Is authenticated:", authService.isAuthenticated());
+      
+      if (!authService.isAuthenticated()) {
+        console.log("Not authenticated, skipping topics load");
+        return;
+      }
+
+      console.log("Loading topics from API...");
+      setLoadingTopics(true);
+      try {
+        const response = await icpService.getAllTopics();
+        console.log("Topics API response:", response);
+        
+        // Handle different response shapes
+        const dataArray = Array.isArray(response?.result)
+          ? response.result
+          : Array.isArray(response?.data)
+          ? response.data
+          : [];
+
+        if (response.status === 200 || dataArray.length) {
+          const mappedTopics = dataArray.map(mapTopicToFrontend);
+          setAllTopics(mappedTopics);
+          setAvailableTopics(mappedTopics);
+          setFilteredTopics(mappedTopics);
+
+          // Build category and theme options
+          const uniqueCategories = [...new Set(mappedTopics.map(t => t.category))]
+            .map(c => ({ label: c as string, value: c as string }));
+          const uniqueThemes = [...new Set(mappedTopics.map(t => t.theme))]
+            .map(t => ({ label: t as string, value: t as string }));
+          
+          setCategoryOptions(uniqueCategories);
+          setThemeOptions(uniqueThemes);
+        } else if (response.status === 404) {
+          toast({
+            title: "No Topics Found",
+            description: response?.message || "No topics found",
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: "Unexpected response from topics API",
+            variant: "destructive",
+          });
+        }
+      } catch (error: any) {
+        if (error.response?.status === 401) {
+          toast({
+            title: "Session Expired",
+            description: "Please login again",
+            variant: "destructive",
+          });
+          // Handle logout - you may need to import your logout action
+          // dispatch(handleLogout());
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to fetch topics. Please try again.",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        setLoadingTopics(false);
+      }
+    };
+
+    loadTopics();
+  }, []);
+
+  // Load other data on mount
+  useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const [catsRes, subsRes, countriesRes] = await Promise.all([
-          icpService.getProductsCategory().catch(() => null),
+        const [subsRes, countriesRes] = await Promise.all([
           icpService.getProductsSubCategory().catch(() => null),
           icpService.getAllCountries().catch(() => null),
         ]);
@@ -388,28 +271,35 @@ export default function BuildVAISForm() {
         if (!mounted) return;
 
         const normalizeArray = (res: any) => {
-          // Try a few common shapes returned by different backends
           if (!res) return null;
           if (Array.isArray(res)) return res;
-          // axios-like: response.data could be the array or an object that wraps the array
           if (Array.isArray(res.data)) return res.data;
           if (Array.isArray(res.data?.data)) return res.data.data;
-          // specific keys used by our ICP endpoints
           if (Array.isArray(res.data?.product_sub_category_list)) return res.data.product_sub_category_list;
           if (Array.isArray(res.product_sub_category_list)) return res.product_sub_category_list;
-          if (Array.isArray(res.data?.product_category_list)) return res.data.product_category_list;
           if (Array.isArray(res.data?.countries)) return res.data.countries;
           if (Array.isArray(res.data?.country_list)) return res.data.country_list;
+          if (Array.isArray(res.result)) return res.result;
           return null;
         };
 
-        const catsArr = normalizeArray(catsRes);
         const subsArr = normalizeArray(subsRes);
-        const countriesArr = normalizeArray(countriesRes);
+        let countriesArr = normalizeArray(countriesRes);
 
-  if (catsArr) setProductCategories(catsArr.map((i: any) => i.product_category_name || i.name || i));
-  if (subsArr) setProductSubcategories(subsArr.map((i: any) => i.product_sub_category_name || i.name || i));
-  if (countriesArr) setGeolocations(countriesArr.map((i: any) => i.country_name || i.name || i));
+        if (!countriesArr) {
+          try {
+            const retryRes = await icpService.getAllCountries();
+            countriesArr = normalizeArray(retryRes);
+          } catch (e) {
+            // keep fallback
+          }
+        }
+
+        if (subsArr) setProductSubcategories(subsArr.map((i: any) => {
+          if (typeof i === 'string') return { id: i, product_sub_category_name: i };
+          return { id: i.id ?? i._id ?? i.product_sub_category_id, product_sub_category_name: i.product_sub_category_name || i.name || i.product_sub_category || i };
+        }));
+        if (countriesArr) setGeolocations(countriesArr.map((i: any) => i.country || i.country_name || i.name || i));
       } catch (e) {
         console.warn('Failed to fetch dropdown data', e);
       }
@@ -417,29 +307,131 @@ export default function BuildVAISForm() {
     return () => { mounted = false; };
   }, []);
 
-  const filteredTopics = intentTopics.filter(
-    (topic) =>
-      topic.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      !selectedTopics.includes(topic.name),
-  );
+  // Filter topics based on search term, category, and theme
+  useEffect(() => {
+    let filtered = availableTopics
+      .filter(t => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      .filter(t => selectedCategory && selectedCategory !== "all-categories" ? t.category === selectedCategory : true)
+      .filter(t => selectedTheme && selectedTheme !== "all-themes" ? t.theme === selectedTheme : true);
+    
+    setFilteredTopics(filtered);
+  }, [availableTopics, searchTerm, selectedCategory, selectedTheme]);
 
-  const handleTopicSelect = (topicName: string) => {
-    if (!selectedTopics.includes(topicName)) {
-      setSelectedTopics([...selectedTopics, topicName]);
-      // Add micro-interaction animation class
-      setTimeout(() => {
-        const element = document.querySelector(`[data-topic="${topicName}"]`);
-        if (element) {
-          element.classList.add("animate-pulse");
-          setTimeout(() => element.classList.remove("animate-pulse"), 500);
-        }
-      }, 100);
+  // Handle topic selection
+  const handleTopicSelect = (topic: Topic) => {
+    if (selectedTopics.length >= 12) {
+      toast({
+        title: "Limit Reached",
+        description: "Maximum 12 topics allowed",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!selectedTopics.find(t => t.id === topic.id)) {
+      const newSelected = [...selectedTopics, topic];
+      setSelectedTopics(newSelected);
+      setAvailableTopics(availableTopics.filter(t => t.id !== topic.id));
+      
+      // Update form data
+      setFormData(prev => ({
+        ...prev,
+        intentTopics: newSelected.map(t => t.name)
+      }));
     }
     setSearchTerm("");
   };
 
-  const handleTopicRemove = (topic: string) => {
-    setSelectedTopics(selectedTopics.filter((t) => t !== topic));
+  // Handle topic removal
+  const handleTopicRemove = (topic: Topic) => {
+    const newSelected = selectedTopics.filter(t => t.id !== topic.id);
+    setSelectedTopics(newSelected);
+    
+    // Only add back to available if it's not from URL search
+    if (!topicUrlList.find(t => t.id === topic.id)) {
+      setAvailableTopics([...availableTopics, topic]);
+    }
+    
+    // Update form data
+    setFormData(prev => ({
+      ...prev,
+      intentTopics: newSelected.map(t => t.name)
+    }));
+  };
+
+  // Handle search by URL
+  const handleSearchByUrl = async () => {
+    const url = generateTopicsInput?.trim();
+    if (!url || !authService.isAuthenticated()) return;
+    
+    try {
+      const response = await icpService.getTopicsByUrl(url);
+      
+      if (response.status === 200 && response.topics) {
+        const mappedTopics = response.topics.map(mapTopicToFrontend);
+        
+        // Only add topics not already selected
+        const newTopics = mappedTopics.filter(newTopic => 
+          !selectedTopics.find(selected => selected.id === newTopic.id)
+        );
+        
+        if (newTopics.length > 0) {
+          // Check if adding would exceed limit
+          const totalAfterAdd = selectedTopics.length + newTopics.length;
+          if (totalAfterAdd > 12) {
+            const canAdd = 12 - selectedTopics.length;
+            if (canAdd > 0) {
+              const toAdd = newTopics.slice(0, canAdd);
+              setSelectedTopics([...selectedTopics, ...toAdd]);
+              setTopicUrlList([...topicUrlList, ...toAdd]);
+              toast({
+                title: "Topics Added",
+                description: `${toAdd.length} topics added (${newTopics.length - canAdd} skipped due to 12 topic limit)`,
+              });
+            } else {
+              toast({
+                title: "Limit Reached",
+                description: "Cannot add topics - 12 topic limit reached",
+                variant: "destructive",
+              });
+            }
+          } else {
+            setSelectedTopics([...selectedTopics, ...newTopics]);
+            setTopicUrlList([...topicUrlList, ...newTopics]);
+            toast({
+              title: "Success",
+              description: `${newTopics.length} topics found and added`,
+            });
+          }
+        } else {
+          toast({
+            title: "No New Topics",
+            description: "No new topics found or all topics already selected",
+          });
+        }
+      } else if (response.status === 404) {
+        toast({
+          title: "No Topics Found",
+          description: response?.message || "No topics found for this URL",
+        });
+      }
+    } catch (error: any) {
+      if (error.response?.status === 401) {
+        toast({
+          title: "Session Expired",
+          description: "Please login again",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to search topics by URL",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setGenerateTopicsInput('');
+    }
   };
 
   const handleFileUpload = (file: File) => {
@@ -472,7 +464,7 @@ export default function BuildVAISForm() {
       const newSearch: SavedSearch = {
         id: Date.now().toString(),
         name: newSearchName,
-        formData: { ...formData, intentTopics: selectedTopics },
+        formData: { ...formData, intentTopics: selectedTopics.map(t => t.name) },
         createdAt: new Date(),
       };
       setSavedSearches([...savedSearches, newSearch]);
@@ -483,7 +475,15 @@ export default function BuildVAISForm() {
 
   const loadSavedSearch = (search: SavedSearch) => {
     setFormData(search.formData);
-    setSelectedTopics(search.formData.intentTopics);
+    // Convert string array back to Topic array by finding matching topics
+    const topicsToSelect = allTopics.filter(topic => 
+      search.formData.intentTopics.includes(topic.name)
+    );
+    setSelectedTopics(topicsToSelect);
+    // Update available topics by removing selected ones
+    setAvailableTopics(allTopics.filter(topic => 
+      !search.formData.intentTopics.includes(topic.name)
+    ));
   };
 
   const getStepProgress = () => {
@@ -503,7 +503,7 @@ export default function BuildVAISForm() {
       case 2:
         return selectedTopics.length > 0;
       case 3:
-        return uploadedFile && fileStatus === "valid"; // Only green when file is uploaded and valid
+        return uploadedFile && fileStatus === "valid";
       case 4:
         return isFormValid();
       default:
@@ -519,50 +519,43 @@ export default function BuildVAISForm() {
     );
   };
 
-  const handleBuildVAIS = () => {
+  const handleBuildVAIS = async () => {
     const payload = {
       product_subcategory: formData.productSubcategory,
       product_category: formData.productCategory,
       geolocation: formData.geolocation,
-      intent_topics: selectedTopics,
+      intent_topics: selectedTopics.map(t => t.name),
     };
 
-    (async () => {
-      try {
-        setIsSaving(true);
-        const res = await icpService.getIcpScore(payload);
-        // Store response in redux for results page
-        dispatch(setICPScore(res));
-        // Navigate to results page
-        navigate('/vais-results');
-      } catch (err: any) {
-        console.error('Error fetching ICP score', err);
-        // show a basic alert for now; UI toast can be used if available
-        window.alert(err?.response?.data?.message || 'Failed to build VAIS. Please try again.');
-      } finally {
-        setIsSaving(false);
-      }
-    })();
+    try {
+      setIsSaving(true);
+      const res = await icpService.getIcpScore(payload);
+      dispatch(setICPScore(res));
+      navigate('/vais-results');
+    } catch (err: any) {
+      console.error('Error fetching ICP score', err);
+      toast({
+        title: "Error",
+        description: err?.response?.data?.message || 'Failed to build VAIS. Please try again.',
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const getTopicInsight = (topic: (typeof intentTopics)[0]) => (
+  const getTopicInsight = (topic: Topic) => (
     <div className="space-y-2">
       <div className="flex justify-between items-center">
         <span className="font-medium">{topic.name}</span>
         <Badge variant="outline" className="text-xs">
-          {topic.conversion} convert
+          ID: {topic.topic_id}
         </Badge>
       </div>
-      <p className="text-sm text-gray-600">{topic.description}</p>
-      <div className="flex items-center justify-between text-xs">
-        <span className="flex items-center">
-          <TrendingUp className="w-3 h-3 mr-1" />
-          Volume: {topic.volume}
-        </span>
-        <span className="flex items-center">
-          <Target className="w-3 h-3 mr-1" />
-          Conversion: {topic.conversion}
-        </span>
+      <div className="text-sm text-gray-600">
+        <p><strong>Category:</strong> {topic.category}</p>
+        <p><strong>Theme:</strong> {topic.theme}</p>
+        <p><strong>Status:</strong> {topic.is_active ? 'Active' : 'Inactive'}</p>
       </div>
     </div>
   );
@@ -731,12 +724,21 @@ export default function BuildVAISForm() {
                       </Label>
                       <Select
                         value={formData.productSubcategory}
-                        onValueChange={(value) =>
-                          setFormData({
-                            ...formData,
-                            productSubcategory: value,
-                          })
-                        }
+                        onValueChange={async (value) => {
+                          // value will be the subcategory id (or name for fallback)
+                          setFormData({ ...formData, productSubcategory: value });
+                          try {
+                            // attempt to fetch the sticky product category using subcategory id
+                            const categoryRes = await icpService.getProductsCategoryForSubcategory(value);
+                            const catArr = Array.isArray(categoryRes) ? categoryRes : categoryRes?.data?.product_category_list || categoryRes?.product_category_list || categoryRes?.data;
+                            const catName = (Array.isArray(catArr) && catArr[0]) ? (catArr[0].product_category_name || catArr[0].name) : undefined;
+                            if (catName) {
+                              setFormData((f) => ({ ...f, productCategory: catName }));
+                            }
+                          } catch (err) {
+                            console.warn('Failed to fetch product category for subcategory', err);
+                          }
+                        }}
                       >
                         <SelectTrigger
                           className={cn(
@@ -748,9 +750,11 @@ export default function BuildVAISForm() {
                           <SelectValue placeholder="Select subcategory" />
                         </SelectTrigger>
                         <SelectContent>
-                          {productSubcategories.map((item) => (
-                            <SelectItem key={item} value={item}>
-                              {item}
+                          {productSubcategories
+                            .filter((item: any) => item.id) // Only show items that have valid IDs
+                            .map((item: any) => (
+                            <SelectItem key={item.id} value={String(item.id)}>
+                              {item.product_sub_category_name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -759,21 +763,23 @@ export default function BuildVAISForm() {
 
                     <div className="space-y-2">
                       <Label htmlFor="category">My Product Category</Label>
-                      <Select
-                        value={formData.productCategory}
-                        onValueChange={(value) =>
-                          setFormData({ ...formData, productCategory: value })
-                        }
-                      >
+                      {/* Product Category is sticky - derived from selected subcategory and not editable */}
+                      <Select value={formData.productCategory} disabled>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select category" />
+                          <SelectValue placeholder="Select Product Category" />
                         </SelectTrigger>
                         <SelectContent>
-                          {productCategories.map((item) => (
-                            <SelectItem key={item} value={item}>
-                              {item}
+                          {formData.productCategory ? (
+                            <SelectItem key={formData.productCategory} value={formData.productCategory}>
+                              {formData.productCategory}
                             </SelectItem>
-                          ))}
+                          ) : (
+                            productCategories.map((item) => (
+                              <SelectItem key={item} value={item}>
+                                {item}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1052,6 +1058,8 @@ export default function BuildVAISForm() {
                         variant="ghost"
                         size="sm"
                         className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 hover:bg-gray-100"
+                        onClick={handleSearchByUrl}
+                        disabled={!generateTopicsInput.trim() || loadingTopics}
                       >
                         <Search className="w-4 h-4 text-gray-400" />
                       </Button>
@@ -1076,19 +1084,19 @@ export default function BuildVAISForm() {
                         Filter Topic by Category
                       </Label>
                       <Select
-                        value={filterTopic}
-                        onValueChange={setFilterTopic}
+                        value={selectedCategory}
+                        onValueChange={setSelectedCategory}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Select a category to filter" />
                         </SelectTrigger>
                         <SelectContent className="max-h-48 overflow-y-auto">
-                          <SelectItem value="all-topics">
+                          <SelectItem value="all-categories">
                             All Categories
                           </SelectItem>
-                          {filterTopics.map((topic) => (
-                            <SelectItem key={topic} value={topic}>
-                              {topic}
+                          {categoryOptions.map((category) => (
+                            <SelectItem key={category.value} value={category.value}>
+                              {category.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1098,17 +1106,17 @@ export default function BuildVAISForm() {
                     <div className="space-y-2">
                       <Label htmlFor="filterTheme">Filter Topic by Theme</Label>
                       <Select
-                        value={filterTheme}
-                        onValueChange={setFilterTheme}
+                        value={selectedTheme}
+                        onValueChange={setSelectedTheme}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Select a theme to filter" />
                         </SelectTrigger>
                         <SelectContent className="max-h-48 overflow-y-auto">
                           <SelectItem value="all-themes">All Themes</SelectItem>
-                          {filterThemes.map((theme) => (
-                            <SelectItem key={theme} value={theme}>
-                              {theme}
+                          {themeOptions.map((theme) => (
+                            <SelectItem key={theme.value} value={theme.value}>
+                              {theme.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1123,13 +1131,13 @@ export default function BuildVAISForm() {
                       <div className="flex flex-wrap gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                         {selectedTopics.map((topic) => (
                           <Badge
-                            key={topic}
+                            key={topic.id}
                             variant="default"
                             className="bg-valasys-orange hover:bg-valasys-orange/80 cursor-pointer transition-all duration-200 transform hover:scale-105"
                             onClick={() => handleTopicRemove(topic)}
-                            data-topic={topic}
+                            data-topic={topic.name}
                           >
-                            {topic}
+                            {topic.name}
                             <X className="w-3 h-3 ml-1" />
                           </Badge>
                         ))}
@@ -1143,22 +1151,27 @@ export default function BuildVAISForm() {
                       Available Topics:
                     </Label>
 
-                    {filteredTopics.length > 0 ? (
+                    {loadingTopics ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-valasys-orange"></div>
+                        <span className="ml-2 text-sm text-valasys-gray-500">Loading topics...</span>
+                      </div>
+                    ) : filteredTopics.length > 0 ? (
                       <div className="space-y-1">
                         {filteredTopics.map((topic) => (
                           <div
-                            key={topic.name}
+                            key={topic.id}
                             className="flex items-center justify-between p-2 hover:bg-valasys-gray-100 rounded cursor-pointer text-sm transition-all duration-200"
                           >
                             <span
                               className="flex-1"
-                              onClick={() => handleTopicSelect(topic.name)}
+                              onClick={() => handleTopicSelect(topic)}
                             >
                               {topic.name}
                             </span>
                             <div className="flex items-center space-x-2">
                               <Badge variant="outline" className="text-xs">
-                                {topic.conversion}
+                                {topic.category}
                               </Badge>
                               <Dialog>
                                 <DialogTrigger asChild>
@@ -1181,7 +1194,8 @@ export default function BuildVAISForm() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-6 w-6 p-0 hover:bg-valasys-orange hover:text-white"
-                                onClick={() => handleTopicSelect(topic.name)}
+                                onClick={() => handleTopicSelect(topic)}
+                                disabled={selectedTopics.length >= 12}
                               >
                                 <Plus className="w-3 h-3" />
                               </Button>
@@ -1191,8 +1205,8 @@ export default function BuildVAISForm() {
                       </div>
                     ) : (
                       <p className="text-sm text-valasys-gray-500 text-center py-4">
-                        {searchTerm
-                          ? "No topics found"
+                        {searchTerm || selectedCategory || selectedTheme
+                          ? "No topics found matching filters"
                           : "All topics selected ✓"}
                       </p>
                     )}
@@ -1421,12 +1435,21 @@ export default function BuildVAISForm() {
                       <Button
                         onClick={handleBuildVAIS}
                         className="w-full bg-valasys-orange hover:bg-valasys-orange/90 transition-all duration-200 transform hover:scale-105"
-                        disabled={!isFormValid()}
+                        disabled={!isFormValid() || isSaving || loadingTopics}
                       >
-                        {!isFormValid() && (
-                          <AlertCircle className="w-4 h-4 mr-2" />
+                        {isSaving ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Building VAIS...
+                          </>
+                        ) : !isFormValid() ? (
+                          <>
+                            <AlertCircle className="w-4 h-4 mr-2" />
+                            Build Your VAIS
+                          </>
+                        ) : (
+                          "Build Your VAIS"
                         )}
-                        Build Your VAIS
                       </Button>
                     </div>
                   </TooltipTrigger>
