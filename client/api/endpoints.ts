@@ -1,4 +1,4 @@
-import { API_BASE_URL } from './config';
+import { API_BASE_URL } from './baseUrl';
 
 const BASE_URL = API_BASE_URL;
 
@@ -9,6 +9,9 @@ export const AUTH_ENDPOINTS = {
   LOGOUT: `${BASE_URL}/logout/`,
   REFRESH_TOKEN: `${BASE_URL}/refresh-token/`,
   FORGOT_PASSWORD: `${BASE_URL}/password-reset-otp-sender/`,
+  // Backwards-compatible keys used across the codebase
+  PASSWORD_RESET_OTP_SENDER: `${BASE_URL}/password-reset-otp-sender/`,
+  FORGOT_PASSWORD_VERIFY_OTP: `${BASE_URL}/password-reset-verify-otp/`,
   RESET_PASSWORD: `${BASE_URL}/password-reset`,
   CHANGE_PASSWORD: `${BASE_URL}/change_password`,
   VERIFY_EMAIL: `${BASE_URL}/verify_email/`,

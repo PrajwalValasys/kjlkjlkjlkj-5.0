@@ -1,42 +1,21 @@
 // API Configuration for VAIS Application
 import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import { API_BASE_URL, BUILD_ENV } from './baseUrl';
+// Re-export base URL and build env for backwards compatibility
+export { API_BASE_URL, BUILD_ENV };
+import { API_ENDPOINTS as ENDPOINTS } from './endpoints';
 
-// Environment configuration
-const getEnvVar = (key: string, fallback: string = ''): string => {
-  const env: any = import.meta.env as any;
-  // Support both VITE_* and REACT_APP_* style keys
-  if (env[key] != null && env[key] !== '') return env[key] as string;
-  // If the key starts with REACT_APP_, also try VITE_ equivalent
-  if (key.startsWith('REACT_APP_')) {
-    const viteKey = key.replace(/^REACT_APP_/, 'VITE_');
-    if (env[viteKey] != null && env[viteKey] !== '') return env[viteKey] as string;
-  }
-  return fallback;
-};
-
-// Environment mapping
-const BUILD_ENV = parseInt(getEnvVar('REACT_APP_BUILD_ENV', getEnvVar('VITE_BUILD_ENV', '0')));
-
-const baseUrls = {
-  0: getEnvVar('REACT_APP_LOCAL_BACKEND_URL', getEnvVar('VITE_LOCAL_BACKEND_URL', 'https://api.valasys.ai')),
-  1: getEnvVar('REACT_APP_STAGING_BACKEND_URL', getEnvVar('VITE_STAGING_BACKEND_URL', 'https://api.valasys.ai')),
-  2: getEnvVar('REACT_APP_PROD_BACKEND_URL', getEnvVar('VITE_PROD_BACKEND_URL', 'https://api.valasys.ai')),
-};
-
-// Prefer an explicit VITE_API_BASE_URL if provided
-const stripTrailingSlash = (u: string) => (u ? u.replace(/\/+$/u, '') : u);
-export const API_BASE_URL = stripTrailingSlash(
-  getEnvVar('VITE_API_BASE_URL', '') || (baseUrls[BUILD_ENV as keyof typeof baseUrls] || baseUrls[0]),
-);
+// Re-export canonical endpoints from endpoints.ts so consumers can import from config
+export const API_ENDPOINTS = ENDPOINTS;
 
 // API Configuration
 export const API_CONFIG = {
   baseURL: API_BASE_URL,
-  timeout: parseInt(getEnvVar('REACT_APP_API_TIMEOUT', getEnvVar('VITE_API_TIMEOUT', '300000'))),
+  timeout: parseInt((import.meta.env as any).VITE_API_TIMEOUT || '50000000'),
   headers: {
     'Content-Type': 'application/json',
-    Accept: 'application/json'
-    },
+    Accept: 'application/json',
+  },
 };
 
 // Create axios instance
@@ -88,10 +67,22 @@ apiClient.interceptors.response.use(
         } catch (refreshError) {
           localStorage.removeItem('valasys_auth_token');
           localStorage.removeItem('valasys_refresh_token');
+          // Notify pages that the session expired so they can react (toasts, cleanup)
+          try {
+            window.dispatchEvent(new CustomEvent('sessionExpired'));
+          } catch (e) {
+            // ignore if CustomEvent isn't supported for some reason
+          }
           window.location.href = '/login';
         }
       } else {
         localStorage.removeItem('valasys_auth_token');
+        // Notify pages that the session expired so they can react (toasts, cleanup)
+        try {
+          window.dispatchEvent(new CustomEvent('sessionExpired'));
+        } catch (e) {
+          // ignore
+        }
         window.location.href = '/login';
       }
     }
@@ -125,30 +116,7 @@ export interface ApiResponse<T = any> {
   error?: string;
 }
 
-// API endpoints
-export const API_ENDPOINTS = {
-  AUTH: {
-    LOGIN: '/login/',
-    REGISTER: '/register',
-    LOGOUT: '/logout/',
-    REFRESH_TOKEN: '/token/refresh/',
-    VERIFY_EMAIL: '/verify_email/',
-    VERIFY_EMAIL_OTP: '/validate-email-otp/',
-    VERIFY_PHONE_OTP: '/validate-phone-otp/',
-    PASSWORD_RESET_OTP_SENDER: '/password-reset-otp-sender/',
-    RESET_PASSWORD: '/password-reset',
-    FORGOT_PASSWORD_VERIFY_OTP: '/password-reset/',
-    CHANGE_PASSWORD: '/change_password',
-    RESEND_OTP_EMAIL: '/resend-otp-email/',
-    RESEND_OTP_PHONE: '/resend-otp-phone/',
-    LINKEDIN_LOGIN: '/user-accounts/linkedin/',
-  },
-  USER: {
-    DETAILS: '/get_profile',
-    UPDATE: '/update_profile/',
-    STATUS: '/get_user_status',
-  },
-};
+// (endpoints are provided by ./endpoints and re-exported above)
 
 // Utility functions
 export const isProduction = (): boolean => BUILD_ENV === 2;

@@ -70,6 +70,7 @@ import {
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import IntentSignalChart from "@/components/dashboard/IntentSignalChart";
+import intentSignal, { FirstLetterCapital } from "@/lib/intent";
 
 interface CompanyData {
   id: string;
@@ -88,6 +89,7 @@ interface CompanyData {
   deltaScore: number;
   matchedTopics: number;
   relatedTopics: string[];
+  topics?: any[] | null;
 }
 
 // Enhanced sample data matching the screenshot
@@ -375,17 +377,21 @@ export default function VAISResults() {
   const [data, setData] = useState<CompanyData[]>(sampleData);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(1000);
+  const [visibleRows, setVisibleRows] = useState<number>(100);
   const [sortField, setSortField] = useState<keyof CompanyData>("vais");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [filters, setFilters] = useState({
     industry: "",
+    subIndustry: "",
     companySize: "",
     country: "",
-    intentSignal: "",
     vaisRange: { min: 0, max: 100 },
   });
+  // options populated from icpScore API response for dynamic dropdowns
+  const [industryOptions, setIndustryOptions] = useState<string[]>([]);
+  const [subIndustryOptions, setSubIndustryOptions] = useState<string[]>([]);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [activeCompany, setActiveCompany] = useState<CompanyData | null>(null);
@@ -398,7 +404,73 @@ export default function VAISResults() {
 
   useEffect(() => {
     if (icpScore && Array.isArray(icpScore.data)) {
-      setData(icpScore.data as CompanyData[]);
+      // Map backend response fields (snake_case) to the frontend CompanyData shape
+      const mapped = (icpScore.data as any[]).map((item) => {
+        const id = String(item.id ?? item.company_id ?? item._id ?? "");
+        const companyName = item.company_name || item.companyName || item.company || "";
+        const vais = Number(item.icp_score ?? item.vais ?? 0);
+        // signal is numeric in the response; translate to a human label when possible
+  const signalNum = Number(item.signal ?? -1);
+  // Map numeric signal to human label; use '-' for unknown (-1) or 0 depending on desired mapping
+  const intentSignalLabel = signalNum === 3 ? "Super Strong" : signalNum === 2 ? "Very Strong" : signalNum === 1 ? "Strong" : "-";
+        const mainIndustry = item.industry_id || item.industry_id || "";
+        const subIndustry = item.sab_industry_name || item.subIndustry || "";
+        const companySize = item.comp_size || item.company_size || "";
+        const revenue = item.revenue || "";
+        const country = item.country || "";
+        const city = item.city || "";
+        const compositeScore = Number(item.composite_score ?? vais);
+        const deltaScore = Number(item.delta_score ?? item.delta ?? 0);
+        const matchedTopics = Array.isArray(item.Topics) ? item.Topics.length : (item.matched_topics ?? 0);
+        const topicsArr = Array.isArray(item.Topics) ? item.Topics : null;
+        const relatedTopics = Array.isArray(item.Topics)
+          ? item.Topics.map((t: any) => t.topic || t.name || String(t))
+          : (item.related_topics || []);
+
+        return {
+          id,
+          companyName,
+          vais,
+          intentSignal: intentSignalLabel,
+          topics: topicsArr,
+          mainIndustry,
+          subIndustry,
+          companySize,
+          revenue,
+          country,
+          city,
+          selected: false,
+          compositeScore,
+          deltaScore,
+          matchedTopics,
+          relatedTopics,
+        } as CompanyData;
+      });
+
+      setData(mapped);
+      // derive industry and sub-industry lists from api payload
+      try {
+        const raw = icpScore.data as any[];
+        const mains = Array.from(
+          new Set(
+            raw
+              .map((it) => it.main_industry || it.industry || it.industry_id || "")
+              .filter(Boolean),
+          ),
+        );
+        const subs = Array.from(
+          new Set(
+            raw
+              .map((it) => it.sub_industry || it.subIndustry || it.sab_industry_name || "")
+              .filter(Boolean),
+          ),
+        );
+
+        setIndustryOptions(mains.sort());
+        setSubIndustryOptions(subs.sort());
+      } catch (e) {
+        // ignore
+      }
     }
   }, [icpScore]);
 
@@ -455,8 +527,7 @@ export default function VAISResults() {
         !filters.companySize || item.companySize === filters.companySize;
       const matchesCountry =
         !filters.country || item.country === filters.country;
-      const matchesIntentSignal =
-        !filters.intentSignal || item.intentSignal === filters.intentSignal;
+      const matchesSubIndustry = !filters.subIndustry || item.subIndustry === filters.subIndustry;
       const matchesVais =
         item.vais >= filters.vaisRange.min &&
         item.vais <= filters.vaisRange.max;
@@ -466,7 +537,7 @@ export default function VAISResults() {
         matchesIndustry &&
         matchesSize &&
         matchesCountry &&
-        matchesIntentSignal &&
+        matchesSubIndustry &&
         matchesVais
       );
     });
@@ -494,9 +565,79 @@ export default function VAISResults() {
   }, [filteredData, sortField, sortDirection]);
 
   // Pagination
-  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedData = sortedData.slice(startIndex, startIndex + itemsPerPage);
+  // prefer server-provided totals when available
+  const serverCount = (() => {
+    if (!icpScore) return null;
+    return (
+      icpScore.pagination?.totalCount ??
+      icpScore.pagination?.total_count ??
+      icpScore.totalCount ??
+      icpScore.totalCounts ??
+      icpScore.total_count ??
+      null
+    );
+  })();
+
+  const totalPages = serverCount ? Math.ceil(Number(serverCount) / itemsPerPage) : Math.ceil(sortedData.length / itemsPerPage);
+
+  // For dynamic loading we show cumulative pages: page 1 shows first itemsPerPage, page 2 shows 2*itemsPerPage etc.
+  const displayedData = sortedData.slice(0, currentPage * itemsPerPage);
+
+  // visibleRows controls how many rows are actually rendered in the DOM to avoid
+  // rendering thousands of rows at once. We gradually increase visibleRows on scroll
+  // before asking for the next page.
+  const paginatedData = displayedData;
+  const renderedRows = paginatedData.slice(0, visibleRows);
+
+  // Counts for footer and header
+  const displayedCount = paginatedData.length;
+  const totalRecords = serverCount ?? sortedData.length;
+
+  // Infinite / dynamic loading on scroll: attach to the table container and
+  // increment currentPage when user scrolls near bottom. Debounced to avoid
+  // multiple rapid increments.
+  const listRef = React.useRef<HTMLDivElement | null>(null);
+  const scrollTimeoutRef = React.useRef<number | null>(null);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      if (scrollTimeoutRef.current) {
+        window.clearTimeout(scrollTimeoutRef.current);
+      }
+      // debounce 120ms
+      scrollTimeoutRef.current = window.setTimeout(() => {
+        const { scrollTop, clientHeight, scrollHeight } = el;
+        const nearBottom = scrollTop + clientHeight >= scrollHeight - 200;
+        if (!nearBottom) return;
+
+        // If there are more rendered rows to show for the currently loaded pages,
+        // increase visibleRows to show them first. This gives a smooth incremental
+        // reveal without expensive DOM updates for all loaded rows.
+        if (visibleRows < paginatedData.length) {
+          setVisibleRows((v) => Math.min(paginatedData.length, v + 100));
+          return;
+        }
+
+        // Otherwise, if we've already revealed all rows for current pages, load next page
+        if (currentPage < totalPages) {
+          setCurrentPage((p) => Math.min(totalPages, p + 1));
+          // after increasing page, proactively increase visibleRows slightly so new rows show progressively
+          setVisibleRows((v) => Math.min((currentPage + 1) * itemsPerPage, v + 100));
+        }
+      }, 120) as unknown as number;
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll as EventListener);
+      if (scrollTimeoutRef.current) {
+        window.clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [currentPage, totalPages, sortedData]);
 
   const handleSort = (field: keyof CompanyData) => {
     if (sortField === field) {
@@ -648,10 +789,8 @@ export default function VAISResults() {
                   </Button>
                 </div>
                 <div className="text-sm text-gray-500">
-                  Total Records:{" "}
-                  <span className="font-medium">{filteredData.length}/827</span>{" "}
-                  Page: <span className="font-medium">{currentPage}</span> of{" "}
-                  <span className="font-medium">{totalPages}</span>
+                  Total Records: <span className="font-medium">{totalRecords}</span>{" "}
+                  Page: <span className="font-medium">{currentPage}</span> of <span className="font-medium">{totalPages}</span>
                 </div>
               </div>
 
@@ -680,60 +819,57 @@ export default function VAISResults() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Industries</SelectItem>
-                    <SelectItem value="Software and IT Services">
-                      Software and IT Services
-                    </SelectItem>
-                    <SelectItem value="Real Estate & Construction">
-                      Real Estate & Construction
-                    </SelectItem>
-                    <SelectItem value="Manufacturing">Manufacturing</SelectItem>
+                    {industryOptions.length > 0 ? (
+                      industryOptions.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {m}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="Software and IT Services">
+                          Software and IT Services
+                        </SelectItem>
+                        <SelectItem value="Real Estate & Construction">
+                          Real Estate & Construction
+                        </SelectItem>
+                        <SelectItem value="Manufacturing">Manufacturing</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
 
                 <Select
-                  value={filters.intentSignal || "all"}
+                  value={filters.subIndustry || "all"}
                   onValueChange={(value) =>
                     setFilters({
                       ...filters,
-                      intentSignal: value === "all" ? "" : value,
+                      subIndustry: value === "all" ? "" : value,
                     })
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Intent Signal" />
+                    <SelectValue placeholder="Sub Industry" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Signals</SelectItem>
-                    <SelectItem value="Super Strong">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-emerald-500 rounded-full mr-2"></div>
-                        Super Strong
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="Very Strong">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                        Very Strong
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="Strong">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                        Strong
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="Medium">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-orange-500 rounded-full mr-2"></div>
-                        Medium
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="Weak">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-                        Weak
-                      </div>
-                    </SelectItem>
+                    <SelectItem value="all">All Sub Industries</SelectItem>
+                    {subIndustryOptions.length > 0 ? (
+                      subIndustryOptions.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="Computer Software">
+                          Computer Software
+                        </SelectItem>
+                        <SelectItem value="Construction">Construction</SelectItem>
+                        <SelectItem value="Advertising Services">
+                          Advertising Services
+                        </SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
 
@@ -788,9 +924,9 @@ export default function VAISResults() {
                   onClick={() =>
                     setFilters({
                       industry: "",
+                      subIndustry: "",
                       companySize: "",
                       country: "",
-                      intentSignal: "",
                       vaisRange: { min: 0, max: 100 },
                     })
                   }
@@ -824,16 +960,24 @@ export default function VAISResults() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="border rounded-lg overflow-hidden">
-                <Table>
+                <div ref={listRef} style={{ maxHeight: '520px', overflow: 'auto' }}>
+                  <Table>
                   <TableHeader>
                     <TableRow className="bg-gray-50 hover:bg-gray-50">
                       <TableHead className="w-12 pl-6">
                         <Checkbox
                           checked={
-                            selectedItems.length === paginatedData.length &&
-                            paginatedData.length > 0
+                            selectedItems.length === renderedRows.length &&
+                            renderedRows.length > 0
                           }
-                          onCheckedChange={handleSelectAll}
+                          onCheckedChange={(checked) => {
+                            // adapt select-all to rendered rows
+                            if (checked) {
+                              setSelectedItems(renderedRows.map((r) => r.id));
+                            } else {
+                              setSelectedItems([]);
+                            }
+                          }}
                         />
                       </TableHead>
                       {columnVisibility.companyName && (
@@ -991,7 +1135,7 @@ export default function VAISResults() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedData.map((item) => (
+                    {renderedRows.map((item) => (
                       <TableRow
                         key={item.id}
                         className={cn(
@@ -1031,19 +1175,26 @@ export default function VAISResults() {
                         )}
                         {columnVisibility.intentSignal && (
                           <TableCell>
-                            <IntentSignalChart
-                              data={{
-                                compositeScore: item.compositeScore,
-                                deltaScore: item.deltaScore,
-                                matchedTopics: item.matchedTopics,
-                                intentSignal: item.intentSignal,
-                                companyName: item.companyName,
-                                vais: item.vais,
-                                revenue: item.revenue,
-                                city: item.city,
-                                relatedTopics: item.relatedTopics,
-                              }}
-                            />
+                            <div>
+                                  {/* IntentSignalChart will render the label; only render a fallback dash if topics are missing */}
+                                  {(!item.topics || item.topics.length === 0) ? (
+                                    <span className="intent-signal custom-td">-</span>
+                                  ) : null}
+                                  <IntentSignalChart
+                                    data={{
+                                      compositeScore: item.compositeScore,
+                                      deltaScore: item.deltaScore,
+                                      matchedTopics: item.matchedTopics,
+                                      intentSignal: item.intentSignal,
+                                      companyName: item.companyName,
+                                      vais: item.vais,
+                                      revenue: item.revenue,
+                                      city: item.city,
+                                      relatedTopics: item.relatedTopics,
+                                      topics: item.topics,
+                                    }}
+                                  />
+                            </div>
                           </TableCell>
                         )}
                         {columnVisibility.mainIndustry && (
@@ -1075,14 +1226,13 @@ export default function VAISResults() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               </div>
 
               {/* Pagination */}
               <div className="flex items-center justify-between p-4 border-t bg-gray-50">
                 <div className="text-sm text-gray-600">
-                  Showing {startIndex + 1} to{" "}
-                  {Math.min(startIndex + itemsPerPage, sortedData.length)} of{" "}
-                  {sortedData.length} results
+                  Showing {renderedRows.length > 0 ? 1 : 0} to {renderedRows.length} of {totalRecords} results
                 </div>
                 <div className="flex items-center space-x-2">
                   <Button
@@ -1441,18 +1591,18 @@ export default function VAISResults() {
                           <span>Technologies</span>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          {(activeCompany?.companyName === "BBCL"
-                            ? ["AutoCAD", "Revit", "Maya", "3ds Max", "+2 more"]
-                            : activeCompany?.relatedTopics || []
-                          ).map((t) => (
-                            <Badge
-                              key={t}
-                              variant="secondary"
-                              className="bg-gray-100"
-                            >
-                              {t}
-                            </Badge>
-                          ))}
+                          {(
+                            (activeCompany?.companyName === "BBCL"
+                              ? ["AutoCAD", "Revit", "Maya", "3ds Max", "+2 more"]
+                              : activeCompany?.relatedTopics || [])
+                          ).map((rawTopic, idx) => {
+                            const t = typeof rawTopic === 'string' ? rawTopic : (rawTopic?.topic || rawTopic?.name || JSON.stringify(rawTopic));
+                            return (
+                              <Badge key={`${t}-${idx}`} variant="secondary" className="bg-gray-100">
+                                {t}
+                              </Badge>
+                            );
+                          })}
                         </div>
                       </div>
                       <div>
